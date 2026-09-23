@@ -154,7 +154,12 @@ function materializeCookies() {
   return writeCookiesTemp(raw);
 }
 
-function cookiesArgs() {
+function hasCookies() {
+  return Boolean(materializeCookies());
+}
+
+function cookiesArgs(useCookies = true) {
+  if (!useCookies) return [];
   const file = materializeCookies();
   return file ? ['--cookies', file] : [];
 }
@@ -202,11 +207,14 @@ function cookieDiagnostics() {
  * reason (bot wall vs. genuinely no formats vs. missing binary) is visible.
  * Returns no cookie values — only counts and a stderr tail.
  */
-function probeYtDlp(platform, url, { timeoutMs = 120000 } = {}) {
+function probeYtDlp(platform, url, { timeoutMs = 120000, client = null, cookies = true } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
   const args = BASE_ARGS.filter((a) => a !== '--ignore-no-formats-error');
-  args.push(...cookiesArgs());
+  args.push(...cookiesArgs(cookies));
+  if (client && platform === 'youtube' && CLIENT_PATTERN.test(client)) {
+    args.push('--extractor-args', `youtube:player_client=${client}`);
+  }
   args.push(url);
   return new Promise((resolve) => {
     execFile(
@@ -241,10 +249,10 @@ function probeYtDlp(platform, url, { timeoutMs = 120000 } = {}) {
   });
 }
 
-function runYtDlp(platform, url, { timeoutMs = 90000, client = null } = {}) {
+function runYtDlp(platform, url, { timeoutMs = 90000, client = null, cookies = true } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
-  const args = [...BASE_ARGS, ...cookiesArgs()];
+  const args = [...BASE_ARGS, ...cookiesArgs(cookies)];
   const extra = EXTRACTOR_ARGS[platform];
   if (extra) args.push(...extra);
   // Optional per-request YouTube player client override (allowlisted). Useful
@@ -280,4 +288,4 @@ function runYtDlp(platform, url, { timeoutMs = 90000, client = null } = {}) {
   });
 }
 
-module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp };
+module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, hasCookies };
