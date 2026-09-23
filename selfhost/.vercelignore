@@ -1,0 +1,5 @@
+# Never ship junk to Vercel. Note: api/bin/ (the bundled yt-dlp binary) must
+# NOT be ignored — it is required at runtime on the serverless platform.
+node_modules
+.git
+test_download

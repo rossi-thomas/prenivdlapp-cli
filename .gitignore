@@ -23,3 +23,7 @@ logs
 
 # Ignored component
 yarn.*
+
+# Self-hosted API backend — cloned reference projects and runtime binaries
+selfhost/vendor/
+selfhost/api/bin/

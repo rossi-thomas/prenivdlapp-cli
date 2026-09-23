@@ -1,0 +1,14 @@
+{
+  "name": "prenivdl-selfhost",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted download API for the PRENIVDL CLI — yt-dlp engine, zero runtime dependencies",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

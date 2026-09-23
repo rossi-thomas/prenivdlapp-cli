@@ -34,6 +34,16 @@ test('getFileExtension: malicious/invalid token payload is ignored', () => {
   assert.equal(getFileExtension(url), 'mp4');
 });
 
+test('getFileExtension: falls back to the extension in the URL path', () => {
+  assert.equal(getFileExtension('https://scontent.cdninstagram.com/v/t66/…/video.mp4?efg=abc'), 'mp4');
+  assert.equal(getFileExtension('https://example.com/file.m4a?token=x'), 'm4a');
+});
+
+test('getFileExtension: path suffix that is not a real extension is ignored', () => {
+  assert.equal(getFileExtension('https://example.com/photo.1234567890'), 'mp4');
+  assert.equal(getFileExtension('https://example.com/noext'), 'mp4', 'default still applies');
+});
+
 test('isValidUrl accepts valid URLs and rejects garbage', () => {
   assert.equal(isValidUrl('https://www.tiktok.com/@u/video/1'), true);
   assert.equal(isValidUrl('not a url'), false);

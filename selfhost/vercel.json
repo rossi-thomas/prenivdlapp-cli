@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "functions": {
+    "api/download.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:platform",
+      "destination": "/api/download?platform=:platform"
+    }
+  ]
+}

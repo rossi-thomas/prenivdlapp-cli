@@ -45,6 +45,7 @@ async function downloadRedNote(url, basePath = 'resultdownload_preniv') {
     }
     console.log('');
 
+    const hasVideos = data.data.downloads && data.data.downloads.length > 0;
     const hasImages = data.data.images && data.data.images.length > 0;
 
     if (!hasVideos && !hasImages) {

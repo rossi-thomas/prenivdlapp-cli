@@ -25,6 +25,21 @@ function getFileExtension(url, defaultExt = 'mp4') {
     }
   } catch (error) {
   }
+  // Fall back to the extension in the URL path (e.g. Instagram video CDN
+  // URLs carry ".mp4"). Only accept a known media extension so query strings
+  // and bare filenames never leak through.
+  try {
+    const { pathname } = new URL(url);
+    const lastSegment = pathname.split('/').pop() || '';
+    const dotIndex = lastSegment.lastIndexOf('.');
+    if (dotIndex > 0 && dotIndex < lastSegment.length - 1) {
+      const ext = lastSegment.slice(dotIndex + 1).toLowerCase();
+      if (/^(mp4|m4a|m4v|mp3|webm|webp|jpg|jpeg|png|gif|mov|avi|wav|opus|ogg|mkv|heic)$/.test(ext)) {
+        return ext;
+      }
+    }
+  } catch (error) {
+  }
   return defaultExt;
 }
 
