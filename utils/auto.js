@@ -85,9 +85,9 @@ async function autoDownload(url, downloadPath) {
 
   const { platform, url: targetUrl } = detected;
   showProcessing('Fetching', ` Analyzing ${platform.name} ${platform.mediaType}...`);
-  await platform.handler(targetUrl, downloadPath);
+  const ok = await platform.handler(targetUrl, downloadPath);
   showStatusFooter();
-  return true;
+  return ok !== false;
 }
 
 module.exports = { autoDownload, detectPlatform, resolveRedirect, getHostname };

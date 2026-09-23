@@ -53,9 +53,10 @@ test('detectPlatform returns null for unknown hosts without network access', asy
 
 test('CLI auto-detects a bare URL and rejects unknown platforms cleanly', () => {
   // Unknown platform: prints a clear unsupported message (no "unknown command"
-  // error), proving the bare-URL fast path handles URLs.
+  // error), proving the bare-URL fast path handles URLs. Exits 1 because no
+  // download happened (the desktop .bat relies on the non-zero exit code).
   const { status, stderr, stdout } = run(['https://example.invalid/not-a-real-site']);
-  assert.equal(status, 0, stderr);
+  assert.equal(status, 1, stderr);
   assert.match(stdout, /unsupported platform/i);
 });
 

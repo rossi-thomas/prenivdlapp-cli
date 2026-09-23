@@ -45,8 +45,9 @@ PLATFORM_CONFIG.forEach(platform => {
     .action(async (url) => {
       showBanner();
       const downloadPath = program.opts().path || getInput().currentDownloadPath;
-      await platform.handler(url, downloadPath);
+      const ok = await platform.handler(url, downloadPath);
       showStatusFooter();
+      if (ok === false) process.exitCode = 1;
     });
 });
 
@@ -77,7 +78,8 @@ const isBareUrl =
 if (isBareUrl) {
   (async () => {
     const downloadPath = extractPathOption(args.slice(1));
-    await autoDownload(firstArg, downloadPath);
+    const ok = await autoDownload(firstArg, downloadPath);
+    if (ok === false) process.exitCode = 1;
   })();
 } else if (process.argv.length === 2) {
   getInput().startInteractive();

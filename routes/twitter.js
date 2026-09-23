@@ -25,7 +25,7 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
     if (!data || !data.status) {
       spinner.fail(chalk.red(' Failed to fetch Twitter video data'));
       console.log(chalk.gray('   • The API returned an error or invalid response'));
-      return;
+      return false;
     }
 
     // The API nests the payload under `data.data`; some earlier responses
@@ -35,7 +35,7 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
     if (!payload.media || payload.media.length === 0) {
       spinner.fail(chalk.red(' Invalid video data received'));
       console.log(chalk.gray('   • The video may be private or unavailable'));
-      return;
+      return false;
     }
 
     spinner.succeed(chalk.green(' Twitter video data fetched successfully!'));
@@ -52,6 +52,7 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
         quality: payload.media[0].quality
       });
       await downloadFile(options.url, filename, downloadSpinner, basePath);
+      return true;
     } else {
       const downloadChoices = buildDownloadChoices('twitter', { media: payload.media });
       
@@ -71,7 +72,7 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
       
       if (selectedDownload === 'cancel') {
         console.log(chalk.yellow('\n Download cancelled.'));
-        return;
+        return false;
       }
       
       const downloadSpinner = ora(` Downloading ${selectedDownload.quality}p video...`).start();
@@ -80,9 +81,11 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
         quality: selectedDownload.quality
       });
       await downloadFile(options.url, filename, downloadSpinner, basePath);
+      return true;
     }
   } catch (error) {
     handleError(error, spinner);
+    return false;
   }
 }
 

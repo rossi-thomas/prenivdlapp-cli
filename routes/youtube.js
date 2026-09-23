@@ -19,15 +19,16 @@ async function downloadYoutube(url, basePath = 'resultdownload_preniv') {
     if (!rawData || !rawData.status) {
       spinner.fail(chalk.red(' Failed to fetch YouTube video data'));
       console.log(chalk.gray('   • The API returned an error or invalid response'));
-      return;
+      return false;
     }
 
     const data = normalizer.normalizeYouTube(rawData.data, 'primary');
 
     if (!data.downloads.video.length && !data.downloads.audio.length) {
       spinner.fail(chalk.red(' No download formats available'));
-      console.log(chalk.gray('   • The video may be unavailable or restricted'));
-      return;
+      console.log(chalk.gray('   • The video is unavailable, restricted, or protected by YouTube'));
+      console.log(chalk.gray('   • New/small-channel videos often require sign-in verification (PO token)'));
+      return false;
     }
 
     spinner.succeed(chalk.green(' YouTube video data fetched successfully!'));
@@ -62,7 +63,7 @@ async function downloadYoutube(url, basePath = 'resultdownload_preniv') {
 
     if (selectedDownload === 'cancel') {
       console.log(chalk.yellow('\n Download cancelled.'));
-      return;
+      return false;
     }
 
     const downloadSpinner = ora(` Downloading ${selectedDownload.type}...`).start();
@@ -73,9 +74,11 @@ async function downloadYoutube(url, basePath = 'resultdownload_preniv') {
       ext: selectedDownload.format
     });
     await downloadFile(options.url, filename, downloadSpinner, basePath, options.maxSize);
+    return true;
 
   } catch (error) {
     handleError(error, spinner);
+    return false;
   }
 }
 
