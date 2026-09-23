@@ -77,8 +77,25 @@ const EXTRACTOR_ARGS = {
  */
 let materializedCookieFile = null;
 
+/**
+ * Does this text actually look like a Netscape-format cookies file? Used to
+ * tell base64 from raw content and — more importantly — to never hand yt-dlp a
+ * malformed file. A garbage `--cookies` path fails EVERY request (not just the
+ * cookie-dependent ones), so an unparseable value must degrade to cookieless.
+ */
+function looksLikeCookies(text) {
+  if (!text || typeof text !== 'string' || !text.trim()) return false;
+  if (/^#\s*(Netscape\s+)?HTTP Cookie File/im.test(text)) return true;
+  // Fallback: a data row with >= 6 tab-separated columns whose 5th is numeric.
+  return text.split('\n').some((line) => {
+    if (!line || line.startsWith('#')) return false;
+    const cols = line.split('\t');
+    return cols.length >= 6 && cols[4].trim() !== '' && !Number.isNaN(Number(cols[4]));
+  });
+}
+
 function writeCookiesTemp(content) {
-  if (!content || !content.trim()) return null;
+  if (!looksLikeCookies(content)) return null;
   if (materializedCookieFile) return materializedCookieFile;
   try {
     const file = path.join(os.tmpdir(), 'prnv-ytdlp-cookies.txt');
@@ -91,25 +108,44 @@ function writeCookiesTemp(content) {
   }
 }
 
+/**
+ * Accepts either form so a misconfigured secret cannot break the service:
+ *   - YTDLP_COOKIES_B64: base64 OF a cookies file (preferred), but the raw
+ *     cookies text pasted here by mistake is detected and used as-is.
+ *   - YTDLP_COOKIES: a path to a cookies file, or the raw content.
+ * Returns null (=> run cookieless) when the value is missing or unparseable.
+ */
 function materializeCookies() {
   if (materializedCookieFile) return materializedCookieFile;
 
   const b64 = process.env.YTDLP_COOKIES_B64;
   if (b64) {
-    let content;
-    try {
-      content = Buffer.from(b64, 'base64').toString('utf-8');
-    } catch (_) {
-      return null;
+    const value = b64.trim();
+    if (!looksLikeCookies(value)) {
+      let decoded = null;
+      try {
+        decoded = Buffer.from(value, 'base64').toString('utf-8');
+      } catch (_) {
+        decoded = null;
+      }
+      if (decoded && looksLikeCookies(decoded)) return writeCookiesTemp(decoded);
     }
-    return writeCookiesTemp(content);
+    // Raw cookies pasted into the *_B64 variable.
+    if (looksLikeCookies(value)) return writeCookiesTemp(value);
+    return null;
   }
 
   const raw = process.env.YTDLP_COOKIES;
   if (!raw) return null;
 
-  // Local path form: point straight at an existing file.
-  if (fs.existsSync(raw) && fs.statSync(raw).isFile()) return raw;
+  // Local path form: point straight at an existing file (validated).
+  if (fs.existsSync(raw) && fs.statSync(raw).isFile()) {
+    try {
+      return writeCookiesTemp(fs.readFileSync(raw, 'utf-8'));
+    } catch (_) {
+      return null;
+    }
+  }
 
   // Otherwise treat the value as the cookies file content itself.
   return writeCookiesTemp(raw);
