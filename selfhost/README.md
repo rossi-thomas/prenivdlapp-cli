@@ -100,16 +100,29 @@ CLI 用 axios 直接把返回 URL 下载成文件。**绝不能返回 m3u8/HLS �
 ## 调参
 
 `lib/ytdlp.js` 的 `EXTRACTOR_ARGS` 是每平台 `--extractor-args` 调参表（现在几乎为
-空）。抖音/小红书等数据中心 IP 被风控时，需要如下处理：
+空）。抖音/小红书等数据中心 IP 被风控、或 YouTube 视频被 Bot 盾保护时，需要
+带有效登录 cookies，支持三种注入方式：
 
 ```powershell
-# 从浏览器导出 cookies.txt（Netscape 格式，浏览器需已登录），然后：
+# ① Vercel / serverless（推荐）：单行 base64，冷启动自动写到 /tmp
+#    从浏览器导出 cookies.txt（Netscape 格式，需已登录），然后：
+$env:YTDLP_COOKIES_B64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\cookies.txt"))
+node server.js
+
+# ② 本地：直接指 cookies 文件路径
 $env:YTDLP_COOKIES = "C:\path\to\cookies.txt"
 node server.js
+
+# ③ 本地：把 cookies.txt 内容本身塞进环境变量（同上，自动物化到临时文件）
 ```
 
-没有 cookies 时 douyin/rednote 会返回干净的 JSON 错误而不是挂住。其余平台调参
-（如 youtube player_client）在 `EXTRACTOR_ARGS` 加。
+没有 cookies 时 douyin/rednote 会返回干净的 JSON 错误而不是挂住；Bot 盾视频
+返回明确受限提示。其余平台调参（如 youtube player_client）在 `EXTRACTOR_ARGS` 加。
+
+> Vercel 部署：在项目 Settings → Environment Variables 里加 `YTDLP_COOKIES_B64`
+> （值 = 上面 ① 输出的 base64 字符串；用一次性小号 + 接受 Google 风控风险）。
+> 每次冷启动解析一次、写 `$TMPDIR/prnv-ytdlp-cookies.txt`（用后即弃），不会
+> 把 cookies 落进 git 或日志。
 
 ## 验证
 
