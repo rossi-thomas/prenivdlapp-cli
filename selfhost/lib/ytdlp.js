@@ -119,7 +119,19 @@ function writeCookiesTemp(content) {
  * Returns null (=> run cookieless) when the value is missing or unparseable.
  */
 function materializeCookies() {
-  if (materializedCookieFile) return materializedCookieFile;
+  // A materialized file may have been rewritten by yt-dlp itself (it saves the
+  // cookie jar back to the --cookies path). Re-validate and rewrite when it no
+  // longer parses, so a warm instance never keeps using a degraded jar.
+  if (materializedCookieFile) {
+    try {
+      if (looksLikeCookies(fs.readFileSync(materializedCookieFile, 'utf-8'))) {
+        return materializedCookieFile;
+      }
+    } catch (_) {
+      // Unreadable — fall through and rewrite.
+    }
+    materializedCookieFile = null;
+  }
 
   const b64 = process.env.YTDLP_COOKIES_B64;
   if (b64) {
