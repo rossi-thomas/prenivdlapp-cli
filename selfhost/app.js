@@ -8,7 +8,7 @@
  * URL shape: /api/<platform>?url=<encoded media URL>
  */
 
-const { runYtDlp } = require('./lib/ytdlp');
+const { runYtDlp, resolveBinary, cookieDiagnostics } = require('./lib/ytdlp');
 const { builders } = require('./lib/mappers');
 
 // The CLI's routes/api.js reads some endpoints under legacy names.
@@ -92,6 +92,20 @@ async function handle(reqUrl) {
 
   const { platform, url } = parsed;
   if (!platform) return { status: false, msg: 'missing platform — use /api/<platform>?url=<encoded url>' };
+
+  // Non-secret operational diagnostics (cookie wiring, runtime, binary path).
+  if (platform === '__diag') {
+    return {
+      status: true,
+      data: {
+        cookies: cookieDiagnostics(),
+        node: process.version,
+        platform: process.platform,
+        binary: resolveBinary()
+      }
+    };
+  }
+
   const builder = builders[platform];
   if (!builder) return { status: false, msg: `unsupported platform "${platform}"` };
   if (!url) return { status: false, msg: `missing url parameter for platform "${platform}"` };

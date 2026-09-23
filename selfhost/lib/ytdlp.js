@@ -156,6 +156,44 @@ function cookiesArgs() {
   return file ? ['--cookies', file] : [];
 }
 
+/**
+ * Non-secret cookie diagnostics for the /api/__diag endpoint: reports whether a
+ * cookies variable is configured, how it was interpreted, and the materialized
+ * file's shape. Never returns cookie values.
+ */
+function cookieDiagnostics() {
+  const b64 = process.env.YTDLP_COOKIES_B64;
+  const raw = process.env.YTDLP_COOKIES;
+  const file = materializeCookies();
+  let bytes = 0;
+  let rows = 0;
+  let hasLoginInfo = false;
+  let looksValid = false;
+  if (file) {
+    try {
+      const content = fs.readFileSync(file, 'utf-8');
+      bytes = Buffer.byteLength(content, 'utf-8');
+      rows = content
+        .split('\n')
+        .filter((l) => l && !l.startsWith('#') && l.split('\t').length >= 6).length;
+      hasLoginInfo = content.includes('LOGIN_INFO');
+      looksValid = looksLikeCookies(content);
+    } catch (_) {
+      // Leave the zeroed defaults when the file cannot be read.
+    }
+  }
+  return {
+    b64Set: Boolean(b64),
+    b64Length: b64 ? b64.trim().length : 0,
+    rawSet: Boolean(raw),
+    file: file || null,
+    bytes,
+    rows,
+    hasLoginInfo,
+    looksValid
+  };
+}
+
 function runYtDlp(platform, url, { timeoutMs = 90000 } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
@@ -190,4 +228,4 @@ function runYtDlp(platform, url, { timeoutMs = 90000 } = {}) {
   });
 }
 
-module.exports = { runYtDlp, resolveBinary };
+module.exports = { runYtDlp, resolveBinary, cookieDiagnostics };

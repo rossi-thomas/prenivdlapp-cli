@@ -19,12 +19,13 @@ module.exports = async function download(req, res) {
   // for hours and this is what makes repeated requests fast across serverless
   // instances (an in-memory cache only helps the instance that gets the hit).
   const ok = body && (body.status === true || body.status === 200 || body.success === true);
+  const noStore = bare || url.includes('__diag');
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
     'Cache-Control',
-    !bare && ok ? 'public, s-maxage=120, stale-while-revalidate=60' : 'no-store'
+    !noStore && ok ? 'public, s-maxage=120, stale-while-revalidate=60' : 'no-store'
   );
   res.statusCode = 200;
   res.end(JSON.stringify(body));
