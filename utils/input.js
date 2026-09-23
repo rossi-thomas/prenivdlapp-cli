@@ -87,9 +87,10 @@ async function processUserInput(input) {
         console.log(chalk.gray('    • The app will auto-detect the platform'));
         console.log(chalk.gray('    • Follow the prompts to select quality/format'));
         console.log('');
-        console.log(chalk.white(' 2. Command Line Mode:'));
-        console.log(chalk.gray('    • Use: ') + chalk.cyan('node index.js <platform> <url>'));
-        console.log(chalk.gray('    • Example: ') + chalk.cyan('node index.js tiktok https://tiktok.com/@user/video/123'));
+        console.log(chalk.white(' 2. Command Line Mode (Auto-detect):'));
+        console.log(chalk.gray('    • Just paste any supported URL: ') + chalk.cyan('node index.js <url>'));
+        console.log(chalk.gray('    • Example: ') + chalk.cyan('node index.js https://tiktok.com/@user/video/123'));
+        console.log(chalk.gray('    • Or use explicit platform: ') + chalk.cyan('node index.js tiktok <url>'));
         console.log(chalk.gray('    • With alias: ') + chalk.cyan('node index.js ig https://instagram.com/p/ABC/'));
         console.log('');
         console.log(chalk.white(' 3. Custom Download Path:'));

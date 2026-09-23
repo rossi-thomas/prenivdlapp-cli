@@ -123,6 +123,34 @@ node index.js
 prnvapp.bat
 ```
 
+## Auto-Detect (Command Line)
+
+You can skip the platform prefix entirely — paste any supported URL and the
+CLI detects the platform automatically:
+
+```bash
+# Auto-detect: no platform prefix needed
+node index.js https://www.tiktok.com/@user/video/1234567890
+node index.js "https://x.com/user/status/1234567890"
+
+# Short links (v.douyin.com, pin.it, xhslink.com...) are resolved once
+# through their redirect before matching
+node index.js https://v.douyin.com/abc123/
+
+# Explicit download command (same behavior, clearer intent)
+node index.js download <url>     # aliases: dl, auto
+
+# Explicit platform is still supported
+node index.js tiktok <url>
+node index.js ig <url>
+
+# Custom download directory with a bare URL
+node index.js -p my_downloads https://youtu.be/ABC123
+```
+
+> Unsupported or unparseable URLs print the supported platform list instead of
+> exiting with an "unknown command" error.
+
 ## Updating the Script
 
 ```bash
@@ -183,7 +211,8 @@ Current download path: my_downloads
 
 ## URL Examples
 
-Simply paste any of these URLs in interactive mode:
+Paste any of these URLs in interactive mode or use them directly on the command
+line (`node index.js <url>`) — the platform is auto-detected:
 
 - **TikTok**: `https://www.tiktok.com/@username/video/1234567890`
 - **Facebook**: `https://www.facebook.com/watch/?v=1234567890` or `https://fb.watch/abc123`
@@ -202,6 +231,24 @@ Simply paste any of these URLs in interactive mode:
 - **Weibo**: `https://weibo.com/tv/show/ABC123`
 
 All files are saved to the specified directory (default: `resultdownload_preniv`).
+
+## Self-Hosted API Backend
+
+The CLI can run against **your own backend** (yt-dlp engine, zero runtime deps)
+instead of the default upstream API — see [`selfhost/`](selfhost/README.md) for
+the full guide:
+
+```powershell
+cd selfhost
+node server.js                                  # http://127.0.0.1:8787
+$env:PRENIV_API_BASE = "http://127.0.0.1:8787"  # point the CLI at it
+node ..\index.js tw https://x.com/user/status/123
+```
+
+All 15 endpoint shapes match the route contracts in `routes/*.js`; Spotify and
+Apple Music are honestly marked unsupported (DRM). Deploy to Vercel with the
+bundled Linux `yt-dlp` binary — the server only returns direct media URLs, so
+the 60s function limit covers extraction, not the download itself.
 
 ## Cross-Platform Compatibility
 
