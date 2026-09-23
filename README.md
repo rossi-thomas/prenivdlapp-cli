@@ -8,6 +8,8 @@
 
 **PRENIVDL - Universal Social Media Downloader CLI.** Download videos, images, audio from TikTok, Instagram, YouTube, Twitter/X, Facebook, Spotify, RedNote, Threads, Kuaishou, Weibo & more. Cross-platform: Windows | Linux | macOS | Termux. Free & open-source.
 
+> 📖 **操作教程 / User Guide:** 打开 `web/index.html`，或运行 `npm run web` 在浏览器中查看图文教程。
+
 ## Key Features
 
 - **TikTok Downloader** - Download videos/image with metadata and multiple quality options
@@ -145,6 +147,7 @@ npm install          # first-time setup (creates/updates package-lock.json)
 npm ci               # reproducible install from the lockfile (CI & local)
 
 npm start            # run the CLI interactively
+npm run web          # serve & open the tutorial page (web/index.html) in a browser
 npm test             # run the unit test suite (node:test — zero extra deps)
 npm run test:coverage  # run the tests with a coverage report
 npm run check        # syntax check all JS files + run the tests
