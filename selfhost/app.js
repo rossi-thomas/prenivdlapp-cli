@@ -29,20 +29,41 @@ function parseRequest(urlStr) {
 const successStatusFor = (platform) => (platform === 'rednote' ? 200 : true);
 const failureStatusFor = (platform) => (platform === 'rednote' ? 404 : false);
 
-async function handle(reqUrl) {
-  let parsed;
-  try {
-    parsed = parseRequest(reqUrl);
-  } catch (_) {
-    return { status: false, msg: 'bad request url' };
+/**
+ * Short-lived result cache + single-flight.
+ *
+ * Extraction costs 3-15s of yt-dlp CPU per call, and both the CLI (retries)
+ * and humans (double-click) repeat identical requests within seconds. Media
+ * URLs stay valid for hours, so caching a successful payload for two minutes
+ * is safe and removes a large share of the compute. Concurrent identical
+ * requests share ONE extraction instead of racing a lambda per request.
+ */
+const CACHE_TTL_MS = 120 * 1000;
+const CACHE_MAX = 50;
+const cache = new Map(); // key -> { expires, payload }
+const inflight = new Map(); // key -> Promise<payload>
+
+function cacheGet(key) {
+  const hit = cache.get(key);
+  if (!hit) return null;
+  if (hit.expires < Date.now()) {
+    cache.delete(key);
+    return null;
   }
+  // Refresh recency so the hottest entries survive eviction.
+  cache.delete(key);
+  cache.set(key, hit);
+  return hit.payload;
+}
 
-  const { platform, url } = parsed;
-  if (!platform) return { status: false, msg: 'missing platform — use /api/<platform>?url=<encoded url>' };
-  const builder = builders[platform];
-  if (!builder) return { status: false, msg: `unsupported platform "${platform}"` };
-  if (!url) return { status: false, msg: `missing url parameter for platform "${platform}"` };
+function cacheSet(key, payload) {
+  cache.set(key, { expires: Date.now() + CACHE_TTL_MS, payload });
+  while (cache.size > CACHE_MAX) {
+    cache.delete(cache.keys().next().value);
+  }
+}
 
+async function extract(platform, url, builder) {
   let info;
   try {
     info = await runYtDlp(platform, url);
@@ -61,6 +82,36 @@ async function handle(reqUrl) {
   return payload;
 }
 
+async function handle(reqUrl) {
+  let parsed;
+  try {
+    parsed = parseRequest(reqUrl);
+  } catch (_) {
+    return { status: false, msg: 'bad request url' };
+  }
+
+  const { platform, url } = parsed;
+  if (!platform) return { status: false, msg: 'missing platform — use /api/<platform>?url=<encoded url>' };
+  const builder = builders[platform];
+  if (!builder) return { status: false, msg: `unsupported platform "${platform}"` };
+  if (!url) return { status: false, msg: `missing url parameter for platform "${platform}"` };
+
+  const key = `${platform}\n${url}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  let pending = inflight.get(key);
+  if (!pending) {
+    pending = extract(platform, url, builder).finally(() => inflight.delete(key));
+    inflight.set(key, pending);
+  }
+  const payload = await pending;
+
+  // Cache only successes/unsupported verdicts; never cache transient errors.
+  if (payload.status === successStatusFor(platform)) cacheSet(key, payload);
+  return payload;
+}
+
 function infoPayload() {
   return {
     status: true,
@@ -68,6 +119,7 @@ function infoPayload() {
     engine: 'yt-dlp',
     platforms: ['tiktok', 'facebook', 'instagram', 'twitter', 'douyin', 'pinterest', 'youtube', 'capcut', 'bluesky', 'rednote', 'threads', 'kuaishou', 'weibo'],
     unsupported: ['spotify', 'applemusic'],
+    cache: { entries: cache.size, ttlSeconds: CACHE_TTL_MS / 1000 },
     usage: '/api/<platform>?url=<encoded url>'
   };
 }

@@ -1,0 +1,18 @@
+{
+  "name": "prenivdl-cloudflare",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Containers deployment for the PRENIVDL self-hosted API",
+  "scripts": {
+    "sync": "node sync-app.cjs",
+    "predeploy": "node sync-app.cjs",
+    "deploy": "wrangler deploy",
+    "dev": "node sync-app.cjs && wrangler dev"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "latest"
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
+}

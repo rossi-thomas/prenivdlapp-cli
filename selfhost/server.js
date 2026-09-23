@@ -27,7 +27,7 @@ function json(res, body, statusCode = 200) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = req.url || '/';
-    if (url === '/' || url === '/health') return json(res, infoPayload());
+    if (url === '/' || url === '/health' || url === '/api' || url === '/api/') return json(res, infoPayload());
     if (!url.startsWith('/api/')) return json(res, { status: false, msg: 'not an API path: ' + url }, 404);
     json(res, await handle(url));
   } catch (err) {

@@ -12,7 +12,8 @@ const { handle, infoPayload } = require('../app');
 
 module.exports = async function download(req, res) {
   const url = req.url || '/';
-  const body = url === '/' || url === '/health' ? infoPayload() : await handle(url);
+  const bare = url === '/' || url === '/health' || url === '/api' || url === '/api/';
+  const body = bare ? infoPayload() : await handle(url);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.statusCode = 200;

@@ -8,6 +8,18 @@
   },
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/api/download"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/download"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/download"
+    },
+    {
       "source": "/api/:platform((?!^download$).*)",
       "destination": "/api/download?platform=:platform"
     }
