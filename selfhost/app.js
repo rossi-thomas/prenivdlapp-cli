@@ -8,7 +8,7 @@
  * URL shape: /api/<platform>?url=<encoded media URL>
  */
 
-const { runYtDlp, resolveBinary, cookieDiagnostics } = require('./lib/ytdlp');
+const { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp } = require('./lib/ytdlp');
 const { builders } = require('./lib/mappers');
 
 // The CLI's routes/api.js reads some endpoints under legacy names.
@@ -99,16 +99,18 @@ async function handle(reqUrl) {
   if (!platform) return { status: false, msg: 'missing platform — use /api/<platform>?url=<encoded url>' };
 
   // Non-secret operational diagnostics (cookie wiring, runtime, binary path).
+  // Add ?url=<media url> to also probe yt-dlp with the real error surfaced.
   if (platform === '__diag') {
-    return {
-      status: true,
-      data: {
-        cookies: cookieDiagnostics(),
-        node: process.version,
-        platform: process.platform,
-        binary: resolveBinary()
-      }
+    const data = {
+      cookies: cookieDiagnostics(),
+      node: process.version,
+      platform: process.platform,
+      binary: resolveBinary()
     };
+    if (url) {
+      data.probe = await probeYtDlp('youtube', url);
+    }
+    return { status: true, data };
   }
 
   const builder = builders[platform];

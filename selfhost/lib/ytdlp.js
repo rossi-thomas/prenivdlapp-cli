@@ -197,6 +197,50 @@ function cookieDiagnostics() {
   };
 }
 
+/**
+ * Diagnostic probe: runs yt-dlp WITHOUT --ignore-no-formats-error so the real
+ * reason (bot wall vs. genuinely no formats vs. missing binary) is visible.
+ * Returns no cookie values — only counts and a stderr tail.
+ */
+function probeYtDlp(platform, url, { timeoutMs = 120000 } = {}) {
+  const bin = resolveBinary();
+  ensureExecutable(bin);
+  const args = BASE_ARGS.filter((a) => a !== '--ignore-no-formats-error');
+  args.push(...cookiesArgs());
+  args.push(url);
+  return new Promise((resolve) => {
+    execFile(
+      bin,
+      args,
+      {
+        timeout: timeoutMs,
+        maxBuffer: 128 * 1024 * 1024,
+        windowsHide: true,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+      },
+      (error, stdout, stderr) => {
+        let formatCount = null;
+        let title = null;
+        try {
+          const parsed = JSON.parse(String(stdout));
+          formatCount = Array.isArray(parsed.formats) ? parsed.formats.length : null;
+          title = parsed.title || null;
+        } catch (_) {
+          // stdout was not JSON — leave nulls.
+        }
+        resolve({
+          binary: bin,
+          exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
+          formatCount,
+          title,
+          errorMessage: error ? String(error.message).slice(0, 200) : null,
+          stderrTail: String(stderr || '').trim().slice(-500)
+        });
+      }
+    );
+  });
+}
+
 function runYtDlp(platform, url, { timeoutMs = 90000, client = null } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
@@ -236,4 +280,4 @@ function runYtDlp(platform, url, { timeoutMs = 90000, client = null } = {}) {
   });
 }
 
-module.exports = { runYtDlp, resolveBinary, cookieDiagnostics };
+module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp };
