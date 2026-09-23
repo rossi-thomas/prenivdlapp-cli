@@ -20,12 +20,15 @@ selfhost/
 ├── app.js             # 共享 handler：URL 解析 / 平台别名 / rednote&pinterest 契约
 ├── api/
 │   ├── download.js    # Vercel serverless 函数（与 server.js 完全同逻辑）
-│   └── bin/yt-dlp     # Linux 版 yt-dlp 二进制（部署时放入，gitignore）
+│   └── bin/yt-dlp     # Linux/amd64 版 yt-dlp 二进制（已入库，Git 部署依赖它）
 ├── lib/
 │   ├── ytdlp.js       # yt-dlp 子进程执行器（90s 超时，EXTRACTOR_ARGS 调参表）
 │   └── mappers.js     # 每平台 yt-dlp→CLI 契约 JSON 的映射器
+├── scripts/
+│   └── fetch-ytdlp.cjs# 刷新 api/bin/yt-dlp 到最新版本（或指定版本）
+├── cloudflare/        # Cloudflare Containers 部署套件（需 Workers Paid + Docker）
 ├── vendor/            # 参考项目浅克隆（cobalt / f2 / yt-dlp 源码，gitignore）
-├── vercel.json        # /api/:platform → /api/download rewrite + 超时/内存
+├── vercel.json        # /api/:platform → /api/download rewrite + 超时/内存/打包
 └── package.json       # 零运行时依赖
 ```
 
@@ -48,26 +51,37 @@ node ..\index.js tw <twitter_url>     # 或直接裸贴 URL 自动识别
 
 ## 部署到 Vercel
 
-Vercel 函数里装的是 Linux 二进制，Windows 本地那套系统 yt-dlp 不适用：
+### 方式 A：Git 自动部署（推荐，推送即上线）
+
+Vercel 后台把这个仓库接进来后，每次 `git push` 都会自动部署。关键配置：
+
+| 设置项 | 值 | 为什么 |
+|---|---|---|
+| Root Directory | `selfhost` | `vercel.json` / `api/` 都在这一层 |
+| Production Branch | `main` | 推送主线即生产 |
+| Framework Preset | Other | 纯函数项目 |
+| Environment Variables | `YTDLP_COOKIES_B64`（可选） | Bot 盾视频/抖音/小红书需要 |
+
+> **`api/bin/yt-dlp` 必须入库。** 它已在仓库里（38 MB，linux/amd64）。Git 构建
+> 遵守 `.gitignore`，若不入库，部署产物会缺少引擎、API 全部报错。`vercel.json`
+> 用 `includeFiles: api/bin/**` 显式声明它随函数打包。
+>
+> 刷新到更新的 yt-dlp：`node scripts/fetch-ytdlp.cjs`（或
+> `node scripts/fetch-ytdlp.cjs 2026.08.19` 指定版本），然后提交。
+
+### 方式 B：本地 CLI 部署（手动）
 
 ```powershell
 cd selfhost
-
-# 1. 下载 Linux yt-dlp 二进制（curl 跟随重定向）
-curl.exe -L -o api/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
-# （Linux/macOS 还需要 chmod +x api/bin/yt-dlp）
-
-# 2. 登录并部署
 vercel login
 vercel --prod
 ```
 
-部署后即用：`PRENIV_API_BASE=https://<your-project>.vercel.app node ..\index.js <platform> <url>`。
+CLI 上传的是本地工作目录（遵守 `.vercelignore`，其中 `api/bin/` 明确保留），
+所以本地 `api/bin/yt-dlp` 会一起上传。**注意：这种方式不会随 `git push` 更新**——
+改了代码必须重新跑 `vercel --prod`。
 
-> 注意：Vercel 函数每次冷启动都是新的，包内的 `api/bin/yt-dlp` 每次都会被重新
-> 写入 tmp 并挂掉 `PATH` 查找（见 `lib/ytdlp.js` 的二进制解析），所以 `api/bin/`
-> 打了 gitignore —— 每次 deploy 前重新下载一遍即可（或者把它放进仓库、去掉
-> gitignore，看个人权衡；放仓库=体积 ~30MB，不放=每次部署多一步）。
+部署后即用：`PRENIV_API_BASE=https://<your-project>.vercel.app node ..\index.js <platform> <url>`。
 
 ## 支持矩阵（本仓库 yt-dlp 2026.08.19 实测）
 

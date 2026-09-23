@@ -26,7 +26,8 @@ yarn.*
 
 # Self-hosted API backend — cloned reference projects and runtime binaries
 selfhost/vendor/
-selfhost/api/bin/
+selfhost/api/bin/*
+!selfhost/api/bin/yt-dlp
 # Cloudflare Containers deployment (staged sources + local wrangler state)
 selfhost/cloudflare/app/
 selfhost/cloudflare/node_modules/
