@@ -7,8 +7,23 @@
     "prnvapp": "./index.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage test/",
+    "check:syntax": "node scripts/check-syntax.js",
+    "check": "npm run check:syntax && npm test",
+    "prepublishOnly": "npm run check"
   },
+  "files": [
+    "index.js",
+    "routes/",
+    "utils/",
+    "scripts/",
+    "prnvapp.bat",
+    "prnvapp.sh",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">= 20.x"
   },

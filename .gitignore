@@ -23,4 +23,3 @@ logs
 
 # Ignored component
 yarn.*
-package-lock.*

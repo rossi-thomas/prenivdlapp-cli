@@ -14,8 +14,12 @@ function getFileExtension(url, defaultExt = 'mp4') {
         const payload = parts[1];
         const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
         if (decoded.filename && typeof decoded.filename === 'string') {
-          const ext = decoded.filename.split('.').pop().toLowerCase();
-          return ext || defaultExt;
+          const dotIndex = decoded.filename.lastIndexOf('.');
+          // Only accept a real extension (e.g. "video.mp4"), never a bare
+          // filename ("video") or leading/trailing dot (".mp4", "video.").
+          if (dotIndex > 0 && dotIndex < decoded.filename.length - 1) {
+            return decoded.filename.slice(dotIndex + 1).toLowerCase() || defaultExt;
+          }
         }
       }
     }

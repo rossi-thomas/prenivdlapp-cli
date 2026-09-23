@@ -2,62 +2,94 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
+
+# Cancel superseded runs on the same ref to stop wasting Actions minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    name: Test on Node.js ${{ matrix.node-version }} and ${{ matrix.os }}
+    name: Test on Node ${{ matrix.node-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    
+    timeout-minutes: 15
+
     strategy:
+      fail-fast: false
       matrix:
         node-version: [20.x, 22.x]
         os: [ubuntu-latest, windows-latest, macos-latest]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-    
-    - name: Install dependencies
-      run: npm install
-    
-    - name: Check for syntax errors
-      run: node -c index.js
-    
-    - name: Verify package.json
-      run: npm ls --depth=0 || true
-    
-    - name: Test CLI help command
-      run: node index.js --help
-    
-    - name: Test CLI version command
-      run: node index.js --version
 
-  lint:
-    name: Lint Code
-    runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-    
-    - name: Install dependencies
-      run: npm install
-    
-    - name: Check for outdated dependencies
-      run: npm outdated || true
-    
-    - name: Audit dependencies
-      run: npm audit --audit-level=moderate || true
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      - name: Verify install tree
+        run: npm ls --depth=0
+
+      - name: Run tests
+        run: npm test
+
+  check:
+    name: Check (syntax + publish contents)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      - name: Syntax check every JS file
+        run: npm run check:syntax
+
+      - name: Verify publish contents
+        run: npm pack --dry-run
+
+  audit:
+    name: Dependency audit & freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      # Report-only: a vulnerability or a newer version should not block PRs,
+      # but the output stays visible in the job log for maintainers.
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Check outdated dependencies
+        run: npm outdated
+        continue-on-error: true

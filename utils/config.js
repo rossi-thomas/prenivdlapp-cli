@@ -1,18 +1,37 @@
-const { downloadTikTok } = require('../routes/tiktok');
-const { downloadFacebook } = require('../routes/facebook');
-const { downloadInstagram } = require('../routes/instagram');
-const { downloadTwitter } = require('../routes/twitter');
-const { downloadDouyin } = require('../routes/douyin');
-const { downloadSpotify } = require('../routes/spotify');
-const { downloadPinterest } = require('../routes/pinterest');
-const { downloadAppleMusic } = require('../routes/applemusic');
-const { downloadYouTube } = require('../routes/youtube');
-const { downloadCapcut } = require('../routes/capcut');
-const { downloadBluesky } = require('../routes/bluesky');
-const { downloadRedNote } = require('../routes/rednote');
-const { downloadThreads } = require('../routes/threads');
-const { downloadKuaishou } = require('../routes/kuaishou');
-const { downloadWeibo } = require('../routes/weibo');
+/**
+ * Platform registry + URL matching.
+ *
+ * Loads route modules LAZILY: every handler is a thin thunk that requires the
+ * route file only on first use. Requiring all 15 routes up front would pull in
+ * their heavy dependencies (inquirer, ora, axios, chalk) on every CLI run —
+ * even a bare `--version` or `--help` — and cost half a second of startup.
+ */
+
+const ROUTE_EXPORTS = {
+  tiktok: 'downloadTikTok',
+  facebook: 'downloadFacebook',
+  instagram: 'downloadInstagram',
+  twitter: 'downloadTwitter',
+  douyin: 'downloadDouyin',
+  spotify: 'downloadSpotify',
+  pinterest: 'downloadPinterest',
+  applemusic: 'downloadAppleMusic',
+  youtube: 'downloadYouTube',
+  capcut: 'downloadCapcut',
+  bluesky: 'downloadBluesky',
+  rednote: 'downloadRedNote',
+  threads: 'downloadThreads',
+  kuaishou: 'downloadKuaishou',
+  weibo: 'downloadWeibo'
+};
+
+function lazyHandler(command) {
+  const exportName = ROUTE_EXPORTS[command];
+  if (!exportName) {
+    throw new Error(`Unknown platform command: ${command}`);
+  }
+  return (...args) => require(`../routes/${command}`)[exportName](...args);
+}
 
 const PLATFORM_CONFIG = [
   {
@@ -20,7 +39,7 @@ const PLATFORM_CONFIG = [
     command: 'tiktok',
     domains: ['tiktok.com'],
     mediaType: 'video',
-    handler: downloadTikTok,
+    handler: lazyHandler('tiktok'),
     exampleUrl: 'https://www.tiktok.com/@username/video/1234567890'
   },
   {
@@ -29,7 +48,7 @@ const PLATFORM_CONFIG = [
     alias: 'fb',
     domains: ['facebook.com', 'fb.watch'],
     mediaType: 'video',
-    handler: downloadFacebook,
+    handler: lazyHandler('facebook'),
     exampleUrl: 'https://www.facebook.com/watch/?v=1234567890'
   },
   {
@@ -38,7 +57,7 @@ const PLATFORM_CONFIG = [
     alias: 'ig',
     domains: ['instagram.com'],
     mediaType: 'media',
-    handler: downloadInstagram,
+    handler: lazyHandler('instagram'),
     exampleUrl: 'https://www.instagram.com/p/ABC123/'
   },
   {
@@ -47,7 +66,7 @@ const PLATFORM_CONFIG = [
     alias: 'tw',
     domains: ['twitter.com', 'x.com'],
     mediaType: 'video',
-    handler: downloadTwitter,
+    handler: lazyHandler('twitter'),
     exampleUrl: 'https://twitter.com/user/status/1234567890'
   },
   {
@@ -56,7 +75,7 @@ const PLATFORM_CONFIG = [
     alias: 'dy',
     domains: ['douyin.com'],
     mediaType: 'video',
-    handler: downloadDouyin,
+    handler: lazyHandler('douyin'),
     exampleUrl: 'https://www.douyin.com/video/1234567890'
   },
   {
@@ -65,7 +84,7 @@ const PLATFORM_CONFIG = [
     alias: 'sp',
     domains: ['spotify.com'],
     mediaType: 'track',
-    handler: downloadSpotify,
+    handler: lazyHandler('spotify'),
     exampleUrl: 'https://open.spotify.com/track/ABC123'
   },
   {
@@ -74,7 +93,7 @@ const PLATFORM_CONFIG = [
     alias: 'pin',
     domains: ['pinterest.com', 'pin.it'],
     mediaType: 'pin',
-    handler: downloadPinterest,
+    handler: lazyHandler('pinterest'),
     exampleUrl: 'https://www.pinterest.com/pin/1234567890/'
   },
   {
@@ -83,7 +102,7 @@ const PLATFORM_CONFIG = [
     alias: 'am',
     domains: ['music.apple.com'],
     mediaType: 'track',
-    handler: downloadAppleMusic,
+    handler: lazyHandler('applemusic'),
     customMatch: (hostname, url) => hostname.includes('apple.com') && url.includes('music.apple.com'),
     exampleUrl: 'https://music.apple.com/id/album/song/123456'
   },
@@ -93,7 +112,7 @@ const PLATFORM_CONFIG = [
     alias: 'yt',
     domains: ['youtube.com', 'youtu.be'],
     mediaType: 'video',
-    handler: downloadYouTube,
+    handler: lazyHandler('youtube'),
     exampleUrl: 'https://www.youtube.com/watch?v=ABC123'
   },
   {
@@ -102,7 +121,7 @@ const PLATFORM_CONFIG = [
     alias: 'cc',
     domains: ['capcut.com'],
     mediaType: 'video',
-    handler: downloadCapcut,
+    handler: lazyHandler('capcut'),
     exampleUrl: 'https://www.capcut.com/tv2/ABC123/'
   },
   {
@@ -111,7 +130,7 @@ const PLATFORM_CONFIG = [
     alias: 'bsky',
     domains: ['bsky.app', 'bsky.social'],
     mediaType: 'post',
-    handler: downloadBluesky,
+    handler: lazyHandler('bluesky'),
     exampleUrl: 'https://bsky.app/profile/user.bsky.social/post/ABC123'
   },
   {
@@ -120,7 +139,7 @@ const PLATFORM_CONFIG = [
     alias: 'xhs',
     domains: ['xiaohongshu.com', 'xhslink.com'],
     mediaType: 'post',
-    handler: downloadRedNote,
+    handler: lazyHandler('rednote'),
     exampleUrl: 'https://www.xiaohongshu.com/explore/ABC123'
   },
   {
@@ -128,7 +147,7 @@ const PLATFORM_CONFIG = [
     command: 'threads',
     domains: ['threads.net'],
     mediaType: 'video',
-    handler: downloadThreads,
+    handler: lazyHandler('threads'),
     exampleUrl: 'https://www.threads.net/@username/post/ABC123'
   },
   {
@@ -137,7 +156,7 @@ const PLATFORM_CONFIG = [
     alias: 'ks',
     domains: ['kuaishou.com', 'ksurl.cn'],
     mediaType: 'media',
-    handler: downloadKuaishou,
+    handler: lazyHandler('kuaishou'),
     exampleUrl: 'https://www.kuaishou.com/short-video/ABC123'
   },
   {
@@ -146,7 +165,7 @@ const PLATFORM_CONFIG = [
     alias: 'wb',
     domains: ['weibo.com', 'weibo.cn'],
     mediaType: 'media',
-    handler: downloadWeibo,
+    handler: lazyHandler('weibo'),
     exampleUrl: 'https://weibo.com/tv/show/ABC123'
   }
 ];

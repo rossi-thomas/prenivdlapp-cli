@@ -130,9 +130,34 @@ cd prenivdlapp-cli
 # Fetch the latest updates from the repository
 git pull origin main
 
-# Install if there are additional dependencies
-npm install
+# Install dependencies from the committed lockfile (reproducible)
+npm ci
 ```
+
+> [!NOTE]
+> `package-lock.json` is committed. Use `npm ci` for clean, reproducible installs;
+> use `npm install` only when adding a new dependency (which updates the lockfile).
+
+## Development
+
+```bash
+npm install          # first-time setup (creates/updates package-lock.json)
+npm ci               # reproducible install from the lockfile (CI & local)
+
+npm start            # run the CLI interactively
+npm test             # run the unit test suite (node:test — zero extra deps)
+npm run test:coverage  # run the tests with a coverage report
+npm run check        # syntax check all JS files + run the tests
+npm run check:syntax # syntax check all JS files only
+```
+
+- Tests live in `test/` and use Node's built-in test runner — no test framework
+  dependency, works offline on Windows / Linux / macOS / Termux.
+- CI (`npm test` on Node 20 & 22 × 3 OS) and the publish gate
+  (`prepublishOnly` → `npm run check`) run the same checks locally and on GitHub.
+- Publishing is automated: pushing a `v*` tag triggers
+  [`.github/workflows/release.yml`](.github/workflows/release.yml), which runs the
+  tests and `npm publish` (requires the `NPM_TOKEN` repository secret).
 
 ### Interactive Commands
 
