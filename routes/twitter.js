@@ -5,6 +5,12 @@ const { getApi } = require('./api');
 const { downloadFile } = require('../utils/download');
 const { fetchJson, handleError, generateFilename, getSelectedOption, buildDownloadChoices } = require('../utils/functions');
 
+// The API nests the payload under `data.data` while some earlier responses
+// expose `media` at the top level. Resolve whichever shape is present.
+function resolveTwitterPayload(data) {
+  return data && data.data && Array.isArray(data.data.media) ? data.data : data;
+}
+
 async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
   const spinner = ora(' Fetching Twitter video data...').start();
 
@@ -21,7 +27,12 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
       console.log(chalk.gray('   • The API returned an error or invalid response'));
       return;
     }
-    if (!data.media || data.media.length === 0) {
+
+    // The API nests the payload under `data.data`; some earlier responses
+    // expose `media` at the top level. Resolve whichever shape is present.
+    const payload = resolveTwitterPayload(data);
+
+    if (!payload.media || payload.media.length === 0) {
       spinner.fail(chalk.red(' Invalid video data received'));
       console.log(chalk.gray('   • The video may be private or unavailable'));
       return;
@@ -30,19 +41,19 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
     spinner.succeed(chalk.green(' Twitter video data fetched successfully!'));
     console.log('');
     console.log(chalk.cyan(' Video Information:'));
-    console.log(chalk.gray('   • ') + chalk.white(`Type: ${data.type || 'video'}`));
-    console.log(chalk.gray('   • ') + chalk.white(`Found ${data.media.length} quality option(s)`));
+    console.log(chalk.gray('   • ') + chalk.white(`Type: ${payload.type || 'video'}`));
+    console.log(chalk.gray('   • ') + chalk.white(`Found ${payload.media.length} quality option(s)`));
     console.log('');
 
-    if (data.media.length === 1) {
+    if (payload.media.length === 1) {
       const downloadSpinner = ora(' Downloading video...').start();
-      const options = getSelectedOption('twitter', { url: data.media[0].url, quality: data.media[0].quality });
+      const options = getSelectedOption('twitter', { url: payload.media[0].url, quality: payload.media[0].quality });
       const filename = generateFilename('twitter', {
-        quality: data.media[0].quality
+        quality: payload.media[0].quality
       });
       await downloadFile(options.url, filename, downloadSpinner, basePath);
     } else {
-      const downloadChoices = buildDownloadChoices('twitter', { media: data.media });
+      const downloadChoices = buildDownloadChoices('twitter', { media: payload.media });
       
       downloadChoices.push({
         name: chalk.gray(' Cancel'),
@@ -75,4 +86,4 @@ async function downloadTwitter(url, basePath = 'resultdownload_preniv') {
   }
 }
 
-module.exports = { downloadTwitter };
+module.exports = { downloadTwitter, resolveTwitterPayload };
