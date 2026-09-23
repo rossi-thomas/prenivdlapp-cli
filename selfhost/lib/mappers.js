@@ -307,9 +307,13 @@ const builders = {
 
   rednote: (info) => {
     const best = pickBest(info) || (safeUrl(info.url) ? { url: info.url } : null);
+    // XiaoHongShu builds a thumbnail entry per imageList item; falls back to
+    // playlist entries on other rednote-ish sources.
     const images = Array.isArray(info.entries)
       ? info.entries.map((e) => safeUrl(e.thumbnail)).filter(Boolean)
-      : [];
+      : Array.isArray(info.thumbnails)
+        ? info.thumbnails.map((t) => safeUrl(t.url)).filter(Boolean)
+        : [];
     const engagement = {
       likes: info.like_count,
       comments: info.comment_count,

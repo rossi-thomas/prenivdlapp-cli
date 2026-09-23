@@ -41,6 +41,7 @@ const BASE_ARGS = [
   '--no-warnings',
   '--skip-download',
   '--dump-single-json',
+  '--ignore-no-formats-error',
   '--socket-timeout', '20',
   '--retries', '1'
 ];
@@ -51,10 +52,23 @@ const EXTRACTOR_ARGS = {
   // youtube: '--extractor-args', 'youtube:player_client=default,-tv'
 };
 
+/**
+ * Optional cookies support. Datacenter IPs get blocked by douyin (and often
+ * xiaohongshu) with "Fresh cookies are needed". Export YTDLP_COOKIES pointing
+ * at a Netscape-format cookies.txt exported from a logged-in browser session
+ * to unlock those platforms:
+ *   $env:YTDLP_COOKIES = "C:\path\to\cookies.txt"
+ * When unset, douyin/xiaohongshu return a clean JSON error instead.
+ */
+function cookiesArgs() {
+  const file = process.env.YTDLP_COOKIES;
+  return file ? ['--cookies', file] : [];
+}
+
 function runYtDlp(platform, url, { timeoutMs = 90000 } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
-  const args = [...BASE_ARGS];
+  const args = [...BASE_ARGS, ...cookiesArgs()];
   const extra = EXTRACTOR_ARGS[platform];
   if (extra) args.push(...extra);
   args.push(url);

@@ -69,13 +69,19 @@ vercel --prod
 > 打了 gitignore —— 每次 deploy 前重新下载一遍即可（或者把它放进仓库、去掉
 > gitignore，看个人权衡；放仓库=体积 ~30MB，不放=每次部署多一步）。
 
-## 支持矩阵
+## 支持矩阵（本仓库 yt-dlp 2026.08.19 实测）
 
 | 平台 | 状态 | 引擎 |
 |---|---|---|
-| youtube / tiktok / facebook / instagram / twitter(X) / threads / bluesky / douyin / weibo / kuaishou / pinterest / capcut | ✅ | yt-dlp 官方提取器 |
-| rednote（小红书） / kuaishou（部分） | ⚠️ | yt-dlp 无官方提取器，视网络/IP 情况 |
+| youtube / tiktok / instagram / facebook / twitter(X) / weibo / bluesky / pinterest | ✅ 已验证 | yt-dlp 官方提取器 |
+| douyin | ⚠️ 需 cookies | 数据中心 IP 被风控（见下方 cookies 一节） |
+| rednote（小红书） | ⚠️ 视网络 | 官方提取器存在，但数据中心 IP 常被验证墙挡在提取器之前 |
+| threads / kuaishou / capcut | ❌ 此版本无提取器 | yt-dlp 主线不含；诚实报错 |
 | spotify / applemusic | ❌ | DRM，诚实返回 unsupported（上游也一样） |
+
+> offline 注意：红色 ❌ 平台 CLI 会显示明确的 JSON 错误（不再摸到不稳定的
+> 上游）。如果必须覆盖 threads/kuaishou/capcut，可以像 cobalt 那样为它们各写
+> 一个专用抓取器 —— 属于后续工作，不在本期范围。
 
 ## 平台契约（CLI routes 需要的 JSON 形状，来自 routes/*.js）
 
@@ -94,8 +100,16 @@ CLI 用 axios 直接把返回 URL 下载成文件。**绝不能返回 m3u8/HLS �
 ## 调参
 
 `lib/ytdlp.js` 的 `EXTRACTOR_ARGS` 是每平台 `--extractor-args` 调参表（现在几乎为
-空）。抖音/TikTok/微博等数据中心 IP 被风控时，需要给 yt-dlp 配 cookies 或
-`--extractor-args`，在那里加。
+空）。抖音/小红书等数据中心 IP 被风控时，需要如下处理：
+
+```powershell
+# 从浏览器导出 cookies.txt（Netscape 格式，浏览器需已登录），然后：
+$env:YTDLP_COOKIES = "C:\path\to\cookies.txt"
+node server.js
+```
+
+没有 cookies 时 douyin/rednote 会返回干净的 JSON 错误而不是挂住。其余平台调参
+（如 youtube player_client）在 `EXTRACTOR_ARGS` 加。
 
 ## 验证
 
