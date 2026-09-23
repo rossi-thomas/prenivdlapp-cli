@@ -21,7 +21,12 @@ function parseRequest(urlStr) {
   if (seg[0] === 'api' && seg[1] && seg[1] !== 'download') platform = seg[1];
   if (!platform) platform = u.searchParams.get('platform');
   if (platform && ALIASES[platform]) platform = ALIASES[platform];
-  return { platform, url: u.searchParams.get('url') };
+  return {
+    platform,
+    url: u.searchParams.get('url'),
+    // Optional, allowlisted in lib/ytdlp.js — never passed through verbatim.
+    client: u.searchParams.get('client')
+  };
 }
 
 // Quirks of the route contracts (routes/*.js): rednote expects a numeric
@@ -63,10 +68,10 @@ function cacheSet(key, payload) {
   }
 }
 
-async function extract(platform, url, builder) {
+async function extract(platform, url, builder, client) {
   let info;
   try {
-    info = await runYtDlp(platform, url);
+    info = await runYtDlp(platform, url, { client });
   } catch (err) {
     return { status: failureStatusFor(platform), msg: err.message };
   }
@@ -90,7 +95,7 @@ async function handle(reqUrl) {
     return { status: false, msg: 'bad request url' };
   }
 
-  const { platform, url } = parsed;
+  const { platform, url, client } = parsed;
   if (!platform) return { status: false, msg: 'missing platform — use /api/<platform>?url=<encoded url>' };
 
   // Non-secret operational diagnostics (cookie wiring, runtime, binary path).
@@ -110,13 +115,13 @@ async function handle(reqUrl) {
   if (!builder) return { status: false, msg: `unsupported platform "${platform}"` };
   if (!url) return { status: false, msg: `missing url parameter for platform "${platform}"` };
 
-  const key = `${platform}\n${url}`;
+  const key = `${platform}\n${url}\n${client || ''}`;
   const cached = cacheGet(key);
   if (cached) return cached;
 
   let pending = inflight.get(key);
   if (!pending) {
-    pending = extract(platform, url, builder).finally(() => inflight.delete(key));
+    pending = extract(platform, url, builder, client).finally(() => inflight.delete(key));
     inflight.set(key, pending);
   }
   const payload = await pending;

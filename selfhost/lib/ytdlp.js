@@ -53,6 +53,9 @@ const EXTRACTOR_ARGS = {
   // youtube: '--extractor-args', 'youtube:player_client=default,-tv'
 };
 
+// Only ever forward a plain client list — never arbitrary extractor arguments.
+const CLIENT_PATTERN = /^[A-Za-z0-9_,.\-]{1,60}$/;
+
 /**
  * Optional cookies support. Datacenter IPs get blocked by douyin (and often
  * xiaohongshu) with "Fresh cookies are needed", and YouTube sometimes guards
@@ -194,12 +197,17 @@ function cookieDiagnostics() {
   };
 }
 
-function runYtDlp(platform, url, { timeoutMs = 90000 } = {}) {
+function runYtDlp(platform, url, { timeoutMs = 90000, client = null } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
   const args = [...BASE_ARGS, ...cookiesArgs()];
   const extra = EXTRACTOR_ARGS[platform];
   if (extra) args.push(...extra);
+  // Optional per-request YouTube player client override (allowlisted). Useful
+  // when a datacenter IP trips the bot check on one client but not another.
+  if (client && platform === 'youtube' && CLIENT_PATTERN.test(client)) {
+    args.push('--extractor-args', `youtube:player_client=${client}`);
+  }
   args.push(url);
 
   return new Promise((resolve, reject) => {
