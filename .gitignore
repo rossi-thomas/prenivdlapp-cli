@@ -43,3 +43,4 @@ selfhost/cloudflare/.wrangler/
 # Cloudflare Pages / wrangler local state
 .wrangler/
 .dev.vars
+.vercel
