@@ -74,3 +74,31 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.sha_tag }}
+
+      # Cloudflare Containers pulls the image server-side and anonymous, so the
+      # package must be PUBLIC. GHCR defaults to private; flip it with the repo
+      # token. Try both the repo-namespace and user-namespace PATCH endpoints.
+      - name: Publish package publicly
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          enc() { python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+          names=$(gh api "repos/${{ github.repository }}/packages?package_type=container" --jq '.[] | .name' 2>/dev/null || true)
+          if [ -z "$names" ]; then
+            echo "no repo-linked container package found yet; will retry on next dispatch" >&2
+            exit 0
+          fi
+          for name in $names; do
+            echo "package: $name"
+            enc_name=$(enc "$name")
+            vis=$(gh api "user/packages/container/$enc_name" --jq .visibility 2>/dev/null || true)
+            if [ "$vis" = "public" ]; then echo "already public ($name)"; continue; fi
+            echo "trying user-namespace PATCH..."
+            if gh api -X PATCH "user/packages/container/$enc_name" -f visibility=public --jq .visibility 2>/dev/null; then
+              echo "made public via user endpoint: $name"
+              continue
+            fi
+            echo "trying repo-namespace PATCH..."
+            gh api -X PATCH "repos/${{ github.repository }}/packages/container/$enc_name" -f visibility=public --jq .visibility || echo "publish step could not flip visibility (repo token may lack permission)" >&2
+          done

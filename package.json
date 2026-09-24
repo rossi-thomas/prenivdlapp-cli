@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "node scripts/test.cjs",
     "test:coverage": "node --test --experimental-test-coverage test/",
     "check:syntax": "node scripts/check-syntax.js",
     "check": "npm run check:syntax && npm test",
