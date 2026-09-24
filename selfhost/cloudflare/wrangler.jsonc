@@ -9,7 +9,9 @@
     {
       "max_instances": 3,
       "class_name": "PrenivdlContainer",
-      "image": "./Dockerfile",
+      // Built and pushed to GHCR by .github/workflows/container-image.yml
+      // (no local Docker needed): ghcr.io/rossi023/prenivdl/prenivdl-api:latest
+      "image": "ghcr.io/rossi023/prenivdl/prenivdl-api:latest",
       "instance_type": "basic"
     }
   ],
