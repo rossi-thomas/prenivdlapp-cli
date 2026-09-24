@@ -78,7 +78,8 @@ const CLIENT_PATTERN = /^[A-Za-z0-9_,.\-]{1,60}$/;
  * When unset, douyin/xiaohongshu return a clean JSON error instead. Cookies
  * are treated as secrets: the temp file is written mode-0600 and never logged.
  */
-let materializedCookieFile = null;
+let materializedCookieFiles = null; // string[] | null — one temp file per jar
+let materializedJarCount = -1;
 
 /**
  * Does this text actually look like a Netscape-format cookies file? Used to
@@ -97,13 +98,82 @@ function looksLikeCookies(text) {
   });
 }
 
-function writeCookiesTemp(content) {
+/**
+ * Enumerate the configured cookie jars in failover order. Two env vars, each
+ * able to carry MORE THAN ONE jar:
+ *
+ *   YTDLP_COOKIES      — one or more file paths, ';'-separated on Windows:
+ *                        "C:\a\cookies.txt;C:\a\cookies2.txt"
+ *                        (fallback single form: a path, or raw cookies content)
+ *   YTDLP_COOKIES_B64  — one or more '|'-separated base64 blobs of cookie files
+ *                        (Vercel-friendly single-line form)
+ *
+ * Each jar is materialized to its own temp file (mode 0600) and tried in
+ * order; the first jar that yields usable media wins. Never logs cookie values.
+ */
+function cookieSources() {
+  const sources = [];
+
+  const b64 = process.env.YTDLP_COOKIES_B64;
+  if (b64) {
+    for (const part of b64.split('|')) {
+      const value = part.trim();
+      if (!value) continue;
+      if (!looksLikeCookies(value)) {
+        try {
+          const decoded = Buffer.from(value, 'base64').toString('utf-8');
+          if (decoded && looksLikeCookies(decoded)) {
+            sources.push(decoded);
+            continue;
+          }
+        } catch (_) {
+          // Not decodable — fall through to the raw-content check below.
+        }
+      }
+      // Raw cookies pasted into the *_B64 variable.
+      if (looksLikeCookies(value)) sources.push(value);
+    }
+  }
+
+  const raw = process.env.YTDLP_COOKIES;
+  if (raw) {
+    if (fs.existsSync(raw) && fs.statSync(raw).isFile()) {
+      // Single-path form.
+      try {
+        sources.push(fs.readFileSync(raw, 'utf-8'));
+      } catch (_) {
+        // Unreadable file — skipped.
+      }
+    } else {
+      // Multi-path form: every ';'-separated part must be an existing file for
+      // this interpretation to win over the raw-content form.
+      const parts = raw.split(';').map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 1 && parts.every((p) => fs.existsSync(p) && fs.statSync(p).isFile())) {
+        for (const p of parts) {
+          try {
+            sources.push(fs.readFileSync(p, 'utf-8'));
+          } catch (_) {
+            // A broken jar in the list is skipped, not fatal.
+          }
+        }
+      } else if (looksLikeCookies(raw)) {
+        sources.push(raw);
+      }
+    }
+  }
+  return sources;
+}
+
+function writeCookiesTemp(content, index) {
   if (!looksLikeCookies(content)) return null;
-  if (materializedCookieFile) return materializedCookieFile;
   try {
-    const file = path.join(os.tmpdir(), 'prnv-ytdlp-cookies.txt');
+    // PID-scoped names: several server processes can run at once (different
+    // ports) and share the OS temp dir — without the PID they would clobber
+    // each other's materialized jars mid-flight.
+    const base = `prnv-ytdlp-cookies-${process.pid}`;
+    const name = index === 0 ? `${base}.txt` : `${base}-${index}.txt`;
+    const file = path.join(os.tmpdir(), name);
     fs.writeFileSync(file, content, { mode: 0o600, encoding: 'utf-8' });
-    materializedCookieFile = file;
     return file;
   } catch (_) {
     // Cookie materialization is best-effort: extraction degrades to cookieless.
@@ -112,105 +182,103 @@ function writeCookiesTemp(content) {
 }
 
 /**
- * Accepts either form so a misconfigured secret cannot break the service:
- *   - YTDLP_COOKIES_B64: base64 OF a cookies file (preferred), but the raw
- *     cookies text pasted here by mistake is detected and used as-is.
- *   - YTDLP_COOKIES: a path to a cookies file, or the raw content.
- * Returns null (=> run cookieless) when the value is missing or unparseable.
+ * Materialize every configured jar to its own temp file. Memoized across calls
+ * for a cold start, but a file yt-dlp rewrote into an unparseable shape is
+ * re-materialized so a warm instance never keeps a degraded jar.
  */
-function materializeCookies() {
-  // A materialized file may have been rewritten by yt-dlp itself (it saves the
-  // cookie jar back to the --cookies path). Re-validate and rewrite when it no
-  // longer parses, so a warm instance never keeps using a degraded jar.
-  if (materializedCookieFile) {
-    try {
-      if (looksLikeCookies(fs.readFileSync(materializedCookieFile, 'utf-8'))) {
-        return materializedCookieFile;
-      }
-    } catch (_) {
-      // Unreadable — fall through and rewrite.
-    }
-    materializedCookieFile = null;
-  }
-
-  const b64 = process.env.YTDLP_COOKIES_B64;
-  if (b64) {
-    const value = b64.trim();
-    if (!looksLikeCookies(value)) {
-      let decoded = null;
+function materializeCookiesList() {
+  const sources = cookieSources();
+  const files = [];
+  for (let i = 0; i < sources.length; i++) {
+    const existing = materializedCookieFiles && materializedCookieFiles[i];
+    if (existing) {
       try {
-        decoded = Buffer.from(value, 'base64').toString('utf-8');
+        if (looksLikeCookies(fs.readFileSync(existing, 'utf-8'))) {
+          files.push(existing);
+          continue;
+        }
       } catch (_) {
-        decoded = null;
+        // Unreadable — fall through and rewrite.
       }
-      if (decoded && looksLikeCookies(decoded)) return writeCookiesTemp(decoded);
     }
-    // Raw cookies pasted into the *_B64 variable.
-    if (looksLikeCookies(value)) return writeCookiesTemp(value);
-    return null;
+    const file = writeCookiesTemp(sources[i], i);
+    if (file) files.push(file);
   }
-
-  const raw = process.env.YTDLP_COOKIES;
-  if (!raw) return null;
-
-  // Local path form: point straight at an existing file (validated).
-  if (fs.existsSync(raw) && fs.statSync(raw).isFile()) {
-    try {
-      return writeCookiesTemp(fs.readFileSync(raw, 'utf-8'));
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // Otherwise treat the value as the cookies file content itself.
-  return writeCookiesTemp(raw);
-}
-
-function hasCookies() {
-  return Boolean(materializeCookies());
-}
-
-function cookiesArgs(useCookies = true) {
-  if (!useCookies) return [];
-  const file = materializeCookies();
-  return file ? ['--cookies', file] : [];
+  materializedCookieFiles = files;
+  materializedJarCount = files.length;
+  return files;
 }
 
 /**
- * Non-secret cookie diagnostics for the /api/__diag endpoint: reports whether a
- * cookies variable is configured, how it was interpreted, and the materialized
- * file's shape. Never returns cookie values.
+ * Back-compat single-jar accessor: the first configured jar, or null.
+ */
+function materializeCookies() {
+  const files = materializeCookiesList();
+  return files.length ? files[0] : null;
+}
+
+function hasCookies() {
+  return materializeCookiesList().length > 0;
+}
+
+function cookieJarCount() {
+  return materializeCookiesList().length;
+}
+
+/**
+ * Build the --cookies args. `useCookies` is either false (none), true (first
+ * jar — back-compat), or a numeric jar index for failover attempts.
+ * NOTE: only a literal `false` means "no cookies" — index 0 is a valid jar.
+ */
+function cookiesArgs(useCookies = true, index = 0) {
+  if (useCookies === false) return [];
+  const files = materializeCookiesList();
+  if (!files.length) return [];
+  if (typeof index === 'number' && index >= 0 && index < files.length) {
+    return ['--cookies', files[index]];
+  }
+  return files.length ? ['--cookies', files[0]] : [];
+}
+
+/**
+ * Non-secret cookie diagnostics for the /api/__diag endpoint: reports how many
+ * jars are configured, how each was interpreted, and each materialized file's
+ * shape. Never returns cookie values.
  */
 function cookieDiagnostics() {
   const b64 = process.env.YTDLP_COOKIES_B64;
   const raw = process.env.YTDLP_COOKIES;
-  const file = materializeCookies();
-  let bytes = 0;
-  let rows = 0;
-  let hasLoginInfo = false;
-  let looksValid = false;
-  if (file) {
+  const files = materializeCookiesList();
+  const jars = files.map((file) => {
+    let bytes = 0;
+    let rows = 0;
+    let hasLoginInfo = false;
+    let looksValid = false;
     try {
       const content = fs.readFileSync(file, 'utf-8');
       bytes = Buffer.byteLength(content, 'utf-8');
-      rows = content
-        .split('\n')
-        .filter((l) => l && !l.startsWith('#') && l.split('\t').length >= 6).length;
-      hasLoginInfo = content.includes('LOGIN_INFO');
+      // Diagnose DATA rows only — comment lines can mention cookie names.
+      const dataRows = content.split('\n').filter((l) => l && !l.startsWith('#'));
+      rows = dataRows.filter((l) => l.split('\t').length >= 6).length;
+      hasLoginInfo = dataRows.some((l) => l.includes('LOGIN_INFO'));
       looksValid = looksLikeCookies(content);
     } catch (_) {
       // Leave the zeroed defaults when the file cannot be read.
     }
-  }
+    return { file, bytes, rows, hasLoginInfo, looksValid };
+  });
   return {
     b64Set: Boolean(b64),
     b64Length: b64 ? b64.trim().length : 0,
     rawSet: Boolean(raw),
-    file: file || null,
-    bytes,
-    rows,
-    hasLoginInfo,
-    looksValid
+    count: jars.length,
+    jars,
+    // Back-compat aggregate (first jar) for any consumer of the flat shape.
+    file: jars[0] ? jars[0].file : null,
+    bytes: jars[0] ? jars[0].bytes : 0,
+    rows: jars[0] ? jars[0].rows : 0,
+    hasLoginInfo: jars.some((j) => j.hasLoginInfo),
+    looksValid: jars.length > 0 && jars.every((j) => j.looksValid)
   };
 }
 
@@ -223,7 +291,7 @@ function probeYtDlp(platform, url, { timeoutMs = 120000, client = null, cookies 
   const bin = resolveBinary();
   ensureExecutable(bin);
   const args = BASE_ARGS.filter((a) => a !== '--ignore-no-formats-error');
-  args.push(...cookiesArgs(cookies));
+  args.push(...cookiesArgs(cookies, typeof cookies === 'number' ? cookies : 0));
   if (client && platform === 'youtube' && CLIENT_PATTERN.test(client)) {
     args.push('--extractor-args', `youtube:player_client=${client}`);
   }
@@ -264,7 +332,7 @@ function probeYtDlp(platform, url, { timeoutMs = 120000, client = null, cookies 
 function runYtDlp(platform, url, { timeoutMs = 90000, client = null, cookies = true } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
-  const args = [...BASE_ARGS, ...cookiesArgs(cookies)];
+  const args = [...BASE_ARGS, ...cookiesArgs(cookies, typeof cookies === 'number' ? cookies : 0)];
   const extra = EXTRACTOR_ARGS[platform];
   if (extra) args.push(...extra);
   // Optional per-request YouTube player client override (allowlisted). Useful
@@ -300,4 +368,4 @@ function runYtDlp(platform, url, { timeoutMs = 90000, client = null, cookies = t
   });
 }
 
-module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, hasCookies };
+module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, hasCookies, cookieJarCount };

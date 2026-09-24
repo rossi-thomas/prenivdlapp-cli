@@ -23,12 +23,32 @@ const target = path.join(here, 'app');
 fs.rmSync(target, { recursive: true, force: true });
 fs.mkdirSync(target, { recursive: true });
 
+/**
+ * Recursive copy that avoids fs.cpSync: on some Windows environments (Node
+ * 24 + EDR/AV), cpSync of a directory tree aborts the process with
+ * STATUS_STACK_BUFFER_OVERRUN (0xC0000409). A plain walk-and-copy works
+ * everywhere and this script is small enough not to need the fast path.
+ */
+function copyTree(from, to) {
+  const entries = fs.readdirSync(from, { withFileTypes: true });
+  fs.mkdirSync(to, { recursive: true });
+  for (const entry of entries) {
+    const src = path.join(from, entry.name);
+    const dst = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      copyTree(src, dst);
+    } else {
+      fs.copyFileSync(src, dst);
+    }
+  }
+}
+
 const files = ['app.js', 'server.js'];
 for (const file of files) {
   fs.copyFileSync(path.join(source, file), path.join(target, file));
 }
 
-fs.cpSync(path.join(source, 'lib'), path.join(target, 'lib'), { recursive: true });
+copyTree(path.join(source, 'lib'), path.join(target, 'lib'));
 
 // The parent package.json declares "type": "module" (the Worker is ESM), which
 // would make Node parse these CommonJS sources as ESM. Pin the staged copy to

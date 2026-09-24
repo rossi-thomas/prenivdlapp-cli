@@ -4,8 +4,15 @@ const chalk = require('chalk');
 const MAX_FILE_SIZE = 35 * 1024 * 1024; // 50 MB in bytes
 
 const fetchJson = async (url, options = {}) => {
+  // Attach the API token to every backend request when one is configured.
+  // Token-gated backends (self-hosted server, deployed Vercel function)
+  // reject requests that lack a matching x-api-token header.
+  const headers = { ...(options.headers || {}) };
+  if (process.env.PRENIV_API_TOKEN && !headers['x-api-token']) {
+    headers['x-api-token'] = process.env.PRENIV_API_TOKEN;
+  }
   try {
-    const result = await (await axios.get(url, { ...options })).data;
+    const result = await (await axios.get(url, { ...options, headers })).data;
     return result;
   } catch (e) {
     return ({ status: false, msg: e.message });

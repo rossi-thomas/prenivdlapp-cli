@@ -8,11 +8,25 @@
  * URL shape: /api/<platform>?url=<encoded media URL>
  */
 
-const { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, hasCookies } = require('./lib/ytdlp');
+const crypto = require('node:crypto');
+const { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, cookieJarCount } = require('./lib/ytdlp');
 const { builders } = require('./lib/mappers');
 
 // The CLI's routes/api.js reads some endpoints under legacy names.
 const ALIASES = { facebookv1: 'facebook', igdl: 'instagram' };
+
+// Optional shared-secret gate. When PRENIV_API_TOKEN is set in the server's
+// environment, every request must carry a matching x-api-token header; when
+// unset the API stays fully open (local/dev convenience). Node's HTTP parser
+// lowercases header names, so only that spelling is matched.
+const TOKEN = process.env.PRENIV_API_TOKEN ? String(process.env.PRENIV_API_TOKEN) : '';
+
+function isAuthorized(headers = {}) {
+  if (!TOKEN) return true;
+  const got = headers && headers['x-api-token'];
+  if (typeof got !== 'string' || got.length !== TOKEN.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(TOKEN));
+}
 
 function parseRequest(urlStr) {
   const u = new URL(urlStr, 'http://localhost');
@@ -101,8 +115,8 @@ async function extract(platform, url, builder, client) {
     return payload;
   };
 
-  const attempt = (useCookies) =>
-    runYtDlp(platform, url, { client, cookies: useCookies }).then((info) => builder(info));
+  const attempt = (cookieIndex) =>
+    runYtDlp(platform, url, { client, cookies: cookieIndex }).then((info) => builder(info));
 
   // Pass 1 — cookieless. This is the fast path, and crucially it is never
   // broken by stale/mismatched cookies (YouTube answers "The page needs to be
@@ -120,15 +134,20 @@ async function extract(platform, url, builder, client) {
   }
 
   // Pass 2 — cookies as a FALLBACK only, for the bot-walled / login-gated
-  // cases pass 1 could not resolve. Failure here cannot regress pass 1.
-  if (hasCookies()) {
-    try {
-      const withCookies = await attempt(true);
-      if (withCookies && !withCookies.unsupported && hasMedia(withCookies)) {
-        return toPayload(withCookies);
+  // cases pass 1 could not resolve. Every configured jar ("big号", then any
+  // failover "小号") is tried in order until one yields usable media. Failure
+  // here can never regress pass 1.
+  const jarCount = cookieJarCount();
+  if (jarCount > 0) {
+    for (let i = 0; i < jarCount; i++) {
+      try {
+        const withCookies = await attempt(i);
+        if (withCookies && !withCookies.unsupported && hasMedia(withCookies)) {
+          return toPayload(withCookies);
+        }
+      } catch (_) {
+        // Ignored: report the cookieless outcome below, which has the real reason.
       }
-    } catch (_) {
-      // Ignored: report the cookieless outcome below, which has the real reason.
     }
   }
 
@@ -139,7 +158,11 @@ async function extract(platform, url, builder, client) {
   return { status: failureStatusFor(platform), msg: cookielessError || 'extraction failed' };
 }
 
-async function handle(reqUrl) {
+async function handle(reqUrl, headers) {
+  // Defense in depth: hosts gate before calling, but a caller that skips the
+  // check must still never get data past the token.
+  if (!isAuthorized(headers)) return { unauthorized: true };
+
   let parsed;
   try {
     parsed = parseRequest(reqUrl);
@@ -200,4 +223,4 @@ function infoPayload() {
   };
 }
 
-module.exports = { handle, infoPayload, parseRequest };
+module.exports = { handle, infoPayload, parseRequest, isAuthorized };
