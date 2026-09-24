@@ -13,7 +13,6 @@
     "test:coverage": "node --test --experimental-test-coverage test/",
     "check:syntax": "node scripts/check-syntax.js",
     "check": "npm run check:syntax && npm test",
-    "web": "node scripts/serve-web.js",
     "prepublishOnly": "npm run check"
   },
   "files": [
@@ -21,7 +20,6 @@
     "routes/",
     "utils/",
     "scripts/",
-    "web/",
     "prnvapp.bat",
     "prnvapp.sh",
     "README.md",

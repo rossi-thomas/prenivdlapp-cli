@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'vendor', 'test_download']);
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'vendor', 'test_download', 'cf-frontend']);
 
 function collectJsFiles(dir) {
   const files = [];

@@ -18,6 +18,13 @@ resultdownload_preniv
 logs
 *.log
 
+# Credentials / cookie jars — never commit (used by selfhost / yt-dlp)
+prenivdl_cookies.txt
+YTDLP_COOKIES_B64.txt
+*cookies*.txt
+.env
+.env.*
+
 # Optional npm cache directory
 .npm
 
@@ -32,3 +39,7 @@ selfhost/api/bin/*
 selfhost/cloudflare/app/
 selfhost/cloudflare/node_modules/
 selfhost/cloudflare/.wrangler/
+
+# Cloudflare Pages / wrangler local state
+.wrangler/
+.dev.vars
