@@ -65,30 +65,20 @@ wrangler.toml               Pages 构建配置（pages_build_output_dir = "publi
 
 ## 部署
 
-### 方式一（推荐）：GitHub Actions 自动部署
+### 方式（推荐）：本地 wrangler 直接同步（当前唯一方式）
 
-`.github/workflows/deploy-frontend.yml`：push 到 main 且 `cf-frontend/**`（或
-workflow 自身）有变更时，自动 `wrangler pages deploy` 到生产，随后自动跑
-`scripts/e2e-cf-frontend.cjs` 验证 验证码 → 代理 → 上游 全链路，绿了才算成功。
-也支持 `workflow_dispatch` 手动触发。
+仓库**不再用 GitHub Actions 做 CF 前端部署**——`deploy-frontend.yml` workflow 已删除，
+改走**本地 wrangler 直传同步**，部署后由 `scripts/e2e-cf-frontend.cjs` 自动跑
+全链路 E2E（验证码 → verify → 代理 → 上游档位）验证，绿了才算成功。
 
-前置：在仓库 Settings → Secrets and variables → Actions 配置两个 secret：
-
-| Secret | 值 |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token，权限勾 **Account → Cloudflare Pages → Edit**（[dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) 创建） |
-| `CLOUDFLARE_ACCOUNT_ID` | `654ca19a79dd27a4be7df35c9d002bbb`（`wrangler whoami` 可查） |
-
-### 方式二：手动兜底
-
-前置：**Vercel 侧先部署带 token 闸门 + cookies 的版本**（否则
-`prenivdl-sage.vercel.app` 501/401；配置见 selfhost/README）：
+前置：Vercel 侧先部署带 token 闸门 + cookies 的版本（否则 `prenivdl-sage.vercel.app`
+501/401；配置见 selfhost/README）。本机已 `wrangler login`（OAuth），**无需任何
+GitHub secret / CI token**。
 
 ```bash
-npx wrangler login
 cd cf-frontend
 
-# 配置两个 Pages secret（首部署后只需在 secret 变动时执行）
+# 配置 Pages secret（首部署后只需在 secret 变动时执行）
 npx wrangler pages secret put PRENIV_API_TOKEN --project-name prenivdl-online
 npx wrangler pages secret put CAPTCHA_SECRET --project-name prenivdl-online
 
@@ -96,7 +86,13 @@ npx wrangler pages secret put CAPTCHA_SECRET --project-name prenivdl-online
 npx wrangler pages deploy public --project-name=prenivdl-online --branch=main
 ```
 
-完成后访问 `https://prenivdl-online.pages.dev`。
+完成后跑全链路 E2E 验证：
+
+```bash
+node scripts/e2e-cf-frontend.cjs
+```
+
+访问 `https://prenivdl-online.pages.dev`。
 
 自定义域名：Cloudflare Dashboard → Pages → 项目 → Custom domains 添加。
 
