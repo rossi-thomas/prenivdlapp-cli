@@ -1,10 +1,29 @@
 'use strict';
-// E2E test of the full CF Pages frontend chain:
-//   /api/captcha -> /api/captcha/verify -> /api/<platform>?url= (proxy to Vercel)
+// E2E test of the full online frontend chain (now on Vercel, single project):
+//   /api/captcha -> /api/captcha/verify -> /api/<platform>?url= (same origin)
 // Verifies the 3x3 click-captcha contract exactly as the browser client does,
-// then checks the upstream proxy returns real formats.
+// then checks the extractor returns real formats.
+//
+// Proxy note: Node's built-in fetch ignores HTTP(S)_PROXY by default. When a
+// proxy env is present (common on CN networks) this script re-executes itself
+// with `node --use-env-proxy` so fetch honors it.
 
-const BASE = process.env.BASE || 'https://prenivdl-online.pages.dev';
+const { execFileSync } = require('node:child_process');
+
+const PROXY_ENV = process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+if (PROXY_ENV && !process.env.PRENIVDL_E2E_PROXY) {
+  // Re-run ourselves with fetch-proxy support. `--use-env-proxy` is consumed
+  // by Node itself (never appears in process.argv), so guard with an env
+  // marker to avoid re-executing forever.
+  process.env.PRENIVDL_E2E_PROXY = '1';
+  execFileSync(process.execPath, ['--use-env-proxy', ...process.argv.slice(1)], {
+    stdio: 'inherit',
+    env: process.env
+  });
+  process.exit(0);
+}
+
+const BASE = process.env.BASE || 'https://prenivdl-sage.vercel.app';
 const VIDEO_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
 const CATEGORIES = ['circle', 'square', 'triangle', 'star', 'heart', 'diamond', 'cross', 'moon'];
@@ -81,11 +100,11 @@ async function main() {
   console.log('status:', vRes.status, '| ok:', v.status, '| session:', v.session ? v.session.slice(0, 24) + '...' : v.msg);
   if (!v.session) throw new Error('verify failed: ' + v.msg);
 
-  console.log('\n== 3) GET /api/youtube via proxy (with x-session) ==');
+  console.log('\n== 3) GET /api/youtube (with x-session) ==');
   const upUrl = BASE + '/api/youtube?url=' + encodeURIComponent(VIDEO_URL);
   const upRes = await fetch(upUrl, { headers: { 'x-session': v.session } });
   const up = await upRes.json();
-  console.log('proxy status:', upRes.status);
+  console.log('youtube status:', upRes.status);
   console.log('json status:', up ? up.status : null, '| msg:', up && up.msg ? up.msg : 'n/a');
   const dl = up && up.data && up.data.downloads;
   if (dl) {

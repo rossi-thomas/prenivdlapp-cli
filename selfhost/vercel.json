@@ -9,8 +9,12 @@
   },
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/api/download"
+      "source": "/api/captcha/verify",
+      "destination": "/api/download?platform=captcha_verify"
+    },
+    {
+      "source": "/api/captcha",
+      "destination": "/api/download?platform=captcha"
     },
     {
       "source": "/health",

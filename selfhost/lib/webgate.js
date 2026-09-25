@@ -1,18 +1,18 @@
 'use strict';
 
 /**
- * Cloudflare Pages Function — thin proxy in front of the token-gated Vercel
- * backend (prenivdl-sage.vercel.app). The browser only talks to this function,
- * so neither the Vercel API token nor the visitor session ever reaches
- * client-side JavaScript.
+ * Visitor gate for the online frontend — mouse-click image CAPTCHA, no typing.
  *
- * Visitor protection = mouse-click image CAPTCHA, no typing:
+ * Client flow (stateless, HMAC-signed):
  *   GET  /api/captcha            → { nonce, expires, target, targetLabel,
- *                                   targetSig, cells:[{id,sig}×9], img }(3×3, TTL 3min)
- *   POST /api/captcha/verify     → { session, expires }         (TTL 30min)
- *   GET  /api/<platform>?url=…   → requires `x-session` header, then forwards.
+ *                                   targetSig, cells:[{id,sig}×9], img } (3×3, TTL 3min)
+ *   POST /api/captcha/verify     → { status, session, expires }          (TTL 30min)
+ *   GET  /api/<platform>?url=…   → requires `x-session` header.
  *
- * Click-CAPTCHA, still fully stateless:
+ * Ported from the previous Cloudflare Pages function (functions/api/[[path]].js)
+ * so the online frontend can live on the SAME Vercel function as the extractor
+ * (single project, no proxy hop, no API token in the browser).
+ *
  *   - The server builds a 3×3 grid from an icon set (circle/square/triangle/
  *     star/heart/diamond/cross/moon). The target icon appears 2–4 times.
  *   - Each cell carries sig = HMAC(secret, `grid.${nonce}.${id}.${category}.${expires}`)
@@ -23,17 +23,12 @@
  *     Forged cells (sigs the server never issued) are rejected.
  *   - Sessions embed their own expiry: sig = HMAC(secret, `ses.${nonce}.${expires}`).
  *
- * Env (set via CF dashboard or `wrangler pages secret put`):
- *   PRENIV_API_TOKEN  — 48-hex token the Vercel backend requires (x-api-token).
- *   CAPTCHA_SECRET    — HMAC key for captcha/session signatures.
- *                      When missing: /api/captcha → 503 and the API is open
- *                      (local dev only; must be set in production).
- *   PRENIV_API_BASE   — optional upstream override (defaults to Vercel);
- *                      handy for local testing against a self-hosted server.
+ * Env: CAPTCHA_SECRET — HMAC key for captcha/session signatures. When missing,
+ * /api/captcha → 503 and the API falls back to token-only auth (CLI mode).
  */
 
-const DEFAULT_UPSTREAM = 'https://prenivdl-sage.vercel.app';
-const UPSTREAM_TIMEOUT_MS = 40000;
+const { webcrypto, randomBytes } = require('node:crypto');
+
 const CAPTCHA_TTL_MS = 180000;          // 验证码生命周期
 const SESSION_TTL_MS = 30 * 60000;      // 会话生命周期
 const SKEW_MS = 5000;                   // 时钟偏差容忍
@@ -47,7 +42,7 @@ const LABELS = {
 const GRID_N = 9;                        // 3×3
 const ICON_COLORS = ['#1f3a5f', '#8c2f39', '#2e6b4f', '#6b3fa0', '#b36b00', '#0f6b7c'];
 
-/** Constant-time string compare (no timingSafeEqual in Workers). */
+/** Constant-time string compare (no timingSafeEqual on arbitrary strings). */
 function constantTimeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) {
     return false;
@@ -57,34 +52,18 @@ function constantTimeEqual(a, b) {
   return diff === 0;
 }
 
-function json(body, status) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'no-store'
-    }
-  });
-}
-
-function randomHex(bytes) {
-  const b = crypto.getRandomValues(new Uint8Array(bytes));
-  return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
-
 const keyCache = new Map();
 async function hmacKey(secret) {
   let k = keyCache.get(secret);
   if (!k) {
-    k = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    k = await webcrypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     keyCache.set(secret, k);
   }
   return k;
 }
 async function hmacHex(secret, data) {
   const key = await hmacKey(secret);
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data));
+  const sig = await webcrypto.subtle.sign('HMAC', key, enc.encode(data));
   return [...new Uint8Array(sig)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
@@ -141,7 +120,7 @@ function renderGridSvg(cells) {
     }
   }
   parts.push('</svg>');
-  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(parts.join(''))));
+  return 'data:image/svg+xml;base64,' + Buffer.from(parts.join('')).toString('base64');
 }
 
 function shuffled(m) {
@@ -169,7 +148,7 @@ function buildGrid() {
 
 async function makeCaptcha(secret) {
   const { target, cells } = buildGrid();
-  const nonce = randomHex(8);
+  const nonce = randomBytes(8).toString('hex');
   const expires = Date.now() + CAPTCHA_TTL_MS;
   const signed = [];
   for (let i = 0; i < GRID_N; i++) {
@@ -233,9 +212,10 @@ async function verifyCaptcha(secret, body) {
   return picks.every((p) => cats[p] === target);
 }
 
+/** GET /api/captcha → { status, ...captcha } */
 async function captchaGet(secret) {
   const cap = await makeCaptcha(secret);
-  return json({
+  return {
     status: true,
     nonce: cap.nonce,
     expires: cap.expires,
@@ -244,113 +224,20 @@ async function captchaGet(secret) {
     targetSig: cap.targetSig,
     cells: cap.cells,
     img: cap.img
-  });
+  };
 }
 
-async function captchaVerify(request, secret) {
-  let body = null;
-  try { body = await request.json(); } catch (_) { body = null; }
-  if (!(await verifyCaptcha(secret, body))) {
-    return json({ status: false, msg: '点选不正确，请重试' }, 401);
-  }
-  const nonce = randomHex(8);
+/** POST /api/captcha/verify → { status, session, expires } | { status:false, msg } */
+async function captchaVerify(secret, body) {
+  const ok = await verifyCaptcha(secret, body);
+  if (!ok) return { status: false, msg: '点选不正确，请重试' };
+  const nonce = randomBytes(8).toString('hex');
   const expires = Date.now() + SESSION_TTL_MS;
   const sig = await hmacHex(secret, `ses.${nonce}.${expires}`);
-  return json({ status: true, session: `${nonce}.${expires}.${sig}`, expires });
+  return { status: true, session: `${nonce}.${expires}.${sig}`, expires };
 }
 
-async function forward(request, env) {
-  const url = new URL(request.url);
-  const upstreamBase = String(env.PRENIV_API_BASE || DEFAULT_UPSTREAM).replace(/\/+$/, '');
-  const upstreamUrl = upstreamBase + url.pathname + url.search;
-
-  const headers = { Accept: 'application/json' };
-  if (env.PRENIV_API_TOKEN) headers['x-api-token'] = String(env.PRENIV_API_TOKEN);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-  try {
-    const upstream = await fetch(upstreamUrl, { headers, signal: controller.signal });
-    const body = await upstream.text();
-    const resp = new Response(body, {
-      status: upstream.status,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-    // Successful extractions are safe to cache briefly at the edge (media URLs
-    // live for hours); failures must never be cached.
-    const cc = upstream.headers.get('cache-control');
-    if (upstream.status < 400 && cc && !/no-store/i.test(cc)) {
-      resp.headers.set('Cache-Control', cc);
-    } else {
-      resp.headers.set('Cache-Control', 'no-store');
-    }
-    return resp;
-  } catch (err) {
-    const timedOut = err && (err.name === 'AbortError' || /timeout/i.test(String(err.message)));
-    return json(
-      {
-        status: false,
-        msg: timedOut ? 'backend timed out - try again later' : 'backend unreachable - try again later'
-      },
-      timedOut ? 504 : 502
-    );
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export async function onRequestGet(context) {
-  const { request, env } = context;
-  const url = new URL(request.url);
-
-  if (url.pathname === '/api/captcha') {
-    const secret = env.CAPTCHA_SECRET;
-    if (!secret) return json({ status: false, msg: 'captcha not configured on server' }, 503);
-    return captchaGet(String(secret));
-  }
-
-  if (url.pathname !== '/api' && !url.pathname.startsWith('/api/')) {
-    return json({ status: false, msg: 'not an API path' }, 404);
-  }
-
-  // Session gate — enforced only when CAPTCHA_SECRET is configured. Without it
-  // the service is open (local dev only; discouraged in production).
-  const secret = env.CAPTCHA_SECRET;
-  if (secret) {
-    const token = request.headers.get('x-session') || '';
-    if (!(await verifySession(String(secret), token))) {
-      return json({ status: false, msg: 'unauthorized - 请先完成图片验证' }, 401);
-    }
-  }
-  return forward(request, env);
-}
-
-export async function onRequestPost(context) {
-  const { request, env } = context;
-  const url = new URL(request.url);
-  if (url.pathname !== '/api/captcha/verify') {
-    return json({ status: false, msg: 'not found' }, 404);
-  }
-  const secret = env.CAPTCHA_SECRET;
-  if (!secret) return json({ status: false, msg: 'captcha not configured on server' }, 503);
-  return captchaVerify(request, String(secret));
-}
-
-export async function onRequestOptions() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'x-session, x-api-token, content-type',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Max-Age': '86400'
-    }
-  });
-}
-
+/** Validate an `x-session` token issued by captchaVerify. */
 async function verifySession(secret, token) {
   if (typeof token !== 'string') return false;
   const parts = token.split('.');
@@ -361,3 +248,10 @@ async function verifySession(secret, token) {
   const expect = await hmacHex(secret, `ses.${nonce}.${expStr}`);
   return constantTimeEqual(expect, sig);
 }
+
+module.exports = {
+  captchaGet,
+  captchaVerify,
+  verifySession,
+  verifyCaptcha
+};

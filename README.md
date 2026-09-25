@@ -8,7 +8,9 @@
 
 **PRENIVDL - Universal Social Media Downloader CLI.** Download videos, images, audio from TikTok, Instagram, YouTube, Twitter/X, Facebook, Spotify, RedNote, Threads, Kuaishou, Weibo & more. Cross-platform: Windows | Linux | macOS | Termux. Free & open-source.
 
-> 📖 **在线下载 / Online:** Cloudflare 部署的网页版下载服务见 `cf-frontend/`（`cf-frontend/README.md`）。
+> 📖 **在线下载 / Online:** 网页版下载服务已并入 `selfhost/` 的 Vercel 单项目
+> （前端静态页 + 图片验证码 + 下载 API 同一域名），部署与自建说明见
+> `selfhost/README.md`。
 
 ## Key Features
 

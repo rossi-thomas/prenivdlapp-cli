@@ -50,7 +50,9 @@ const BASE_ARGS = [
 // Per-platform extra yt-dlp flags. Tuned empirically; keep empty unless a
 // platform needs a specific player client / hostname override.
 const EXTRACTOR_ARGS = {
-  // youtube: '--extractor-args', 'youtube:player_client=default,-tv'
+  // Try multiple player clients to avoid bot checks returning HLS-only.
+  // NOTE: values must be ARRAYS — runYtDlp spreads them via args.push(...extra).
+  youtube: ['--extractor-args', 'youtube:player_client=web,android,ios,default']
 };
 
 // Only ever forward a plain client list — never arbitrary extractor arguments.
