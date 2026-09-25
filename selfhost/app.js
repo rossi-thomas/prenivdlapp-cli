@@ -9,7 +9,7 @@
  */
 
 const crypto = require('node:crypto');
-const { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, cookieJarCount } = require('./lib/ytdlp');
+const { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, cookieJarCount, defaultTimeoutMs } = require('./lib/ytdlp');
 const { builders } = require('./lib/mappers');
 
 // The CLI's routes/api.js reads some endpoints under legacy names.
@@ -115,8 +115,25 @@ async function extract(platform, url, builder, client) {
     return payload;
   };
 
-  const attempt = (cookieIndex) =>
-    runYtDlp(platform, url, { client, cookies: cookieIndex }).then((info) => builder(info));
+  // Total budget across EVERY pass (cookieless + each cookie jar): Vercel
+  // kills the function at maxDuration (60s), so a cookieless timeout followed
+  // by two jar attempts would blow past the wall and return a bare gateway
+  // error instead of JSON. Each run gets the remainder of the budget, never
+  // the full per-run timeout.
+  const budgetMs = Number(process.env.YTDLP_BUDGET_MS) || defaultTimeoutMs;
+  const deadline = Date.now() + budgetMs;
+
+  const attempt = (cookieIndex) => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 2000) {
+      return Promise.reject(new Error(`timeout budget exhausted after ${budgetMs / 1000}s`));
+    }
+    return runYtDlp(platform, url, {
+      client,
+      cookies: cookieIndex,
+      timeoutMs: Math.min(defaultTimeoutMs, remaining)
+    }).then((info) => builder(info));
+  };
 
   // Pass 1 — cookieless. This is the fast path, and crucially it is never
   // broken by stale/mismatched cookies (YouTube answers "The page needs to be

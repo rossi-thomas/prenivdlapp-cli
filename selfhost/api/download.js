@@ -64,6 +64,17 @@ module.exports = async function download(req, res) {
     platform = new URL(req.url || '/', 'http://localhost').searchParams.get('platform');
   } catch (_) { /* stays null */ }
 
+  try {
+    return await route(req, res, platform);
+  } catch (err) {
+    // Never leak a naked 500: surface the reason as JSON so the frontend /
+    // CLI can render it (and so Vercel doesn't replace it with a gateway page).
+    return json(res, 500, { status: false, msg: `server error: ${(err && err.message) || err}` });
+  }
+};
+
+async function route(req, res, platform) {
+
   // ---- public captcha endpoints (mint sessions; no token/session needed) ----
   if (platform === 'captcha') {
     if (!CAPTCHA_SECRET) {

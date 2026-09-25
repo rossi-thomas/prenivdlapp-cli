@@ -47,6 +47,17 @@ const BASE_ARGS = [
   '--retries', '1'
 ];
 
+/**
+ * Extraction timeout. Vercel functions are killed at maxDuration (60s in
+ * vercel.json); a yt-dlp run that outlives that gets slaughtered mid-flight and
+ * the caller sees a bare gateway timeout instead of a JSON error. On Vercel we
+ * default to 50s so a slow platform fails INSIDE the handler with a usable
+ * message; local/dev hosts have no such wall and keep the generous 120s.
+ * Override explicitly with YTDLP_TIMEOUT_MS where a platform needs headroom.
+ */
+const DEFAULT_TIMEOUT_MS =
+  Number(process.env.YTDLP_TIMEOUT_MS) || (process.env.VERCEL ? 50000 : 120000);
+
 // Per-platform extra yt-dlp flags. Tuned empirically; keep empty unless a
 // platform needs a specific player client / hostname override.
 const EXTRACTOR_ARGS = {
@@ -289,7 +300,7 @@ function cookieDiagnostics() {
  * reason (bot wall vs. genuinely no formats vs. missing binary) is visible.
  * Returns no cookie values — only counts and a stderr tail.
  */
-function probeYtDlp(platform, url, { timeoutMs = 120000, client = null, cookies = true } = {}) {
+function probeYtDlp(platform, url, { timeoutMs = DEFAULT_TIMEOUT_MS, client = null, cookies = true } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
   const args = BASE_ARGS.filter((a) => a !== '--ignore-no-formats-error');
@@ -331,7 +342,7 @@ function probeYtDlp(platform, url, { timeoutMs = 120000, client = null, cookies 
   });
 }
 
-function runYtDlp(platform, url, { timeoutMs = 90000, client = null, cookies = true } = {}) {
+function runYtDlp(platform, url, { timeoutMs = DEFAULT_TIMEOUT_MS, client = null, cookies = true } = {}) {
   const bin = resolveBinary();
   ensureExecutable(bin);
   const args = [...BASE_ARGS, ...cookiesArgs(cookies, typeof cookies === 'number' ? cookies : 0)];
@@ -370,4 +381,4 @@ function runYtDlp(platform, url, { timeoutMs = 90000, client = null, cookies = t
   });
 }
 
-module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, hasCookies, cookieJarCount };
+module.exports = { runYtDlp, resolveBinary, cookieDiagnostics, probeYtDlp, hasCookies, cookieJarCount, defaultTimeoutMs: DEFAULT_TIMEOUT_MS };

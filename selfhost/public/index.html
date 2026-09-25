@@ -220,7 +220,7 @@
 <main>
   <section class="hero">
     <h1>粘贴链接，在线下载</h1>
-    <p class="sub">支持 13 个平台 · 云端为无登录态环境，部分平台 / 视频受登录与 IP 风控限制，尽力而为</p>
+    <p class="sub">支持 13 个平台 · 云端已配置 cookies 增强解析；部分平台受登录与数据中心 IP 风控限制，尽力而为</p>
     <form id="parse-form" class="parse-box" autocomplete="off">
       <input id="url-input" type="text" inputmode="url" placeholder="粘贴 YouTube / TikTok / 抖音 / Twitter / Instagram… 链接" spellcheck="false" />
       <button type="submit" id="go-btn">解析</button>
@@ -292,7 +292,7 @@ const API_BASE = (new URLSearchParams(location.search).get('api') || '/api').rep
 
 const PLATFORMS = [
   { id: 'youtube',   name: 'YouTube',       re: /(^|\.)youtube\.com|youtu\.be|youtube-nocookie\.com/i },
-  { id: 'tiktok',    name: 'TikTok',        re: /(^|\.)tiktok\.com/i },
+  { id: 'tiktok',    name: 'TikTok',        re: /(^|\.)tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com/i },
   { id: 'douyin',    name: '抖音',          re: /(^|\.)douyin\.com|iesdouyin\.com|douyinpic\.com/i },
   { id: 'twitter',   name: 'Twitter / X',   re: /(^|\.)twitter\.com|(^|\.)x\.com/i },
   { id: 'instagram', name: 'Instagram',     re: /(^|\.)instagram\.com|instagr\.am/i },
@@ -546,7 +546,20 @@ async function apiFetch(platformId, url) {
   const endpoint = `${API_BASE}/${platformId}?${params.toString()}`;
   const headers = {};
   if (session) headers['x-session'] = session;
-  const res = await fetch(endpoint, { headers });
+  // Vercel 函数上限 60s + yt-dlp 自身超时 50s：给足余量，避免浏览器无限转圈。
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 80000);
+  let res;
+  try {
+    res = await fetch(endpoint, { headers, signal: controller.signal });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err && err.name === 'AbortError') {
+      throw new Error('解析超时（云端处理超过 80 秒）。平台可能较慢或风控拦截，请稍后重试，或换一个视频。');
+    }
+    throw new Error('网络请求失败，请检查网络后重试。');
+  }
+  clearTimeout(timer);
   if (res.status === 401) {
     const ok = await openCaptchaModal();
     if (ok) return apiFetch(platformId, url);
@@ -568,6 +581,10 @@ function friendlyErr(msg) {
   if (!s) return '解析失败，请稍后重试。';
   if (/Sign in to confirm you're not a bot|confirm you're not a bot|not a bot|bot check/i.test(s))
     return '平台把云端服务器判定为机器人（Bot 校验），暂时拒绝解析。可以稍后重试、换一个视频，或使用本机版（带 cookies）。';
+  if (/Your IP address is blocked|IP address was blocked|temporarily blocked|rate limit/i.test(s))
+    return '平台封锁了云端服务器的 IP（数据中心 IP 风控），此链接暂时无法在线解析。可以稍后重试、换一个视频；稳定解析请使用本机版。';
+  if (/login required|requires authentication|authentication was required|sign in to continue|log in to continue|--cookies for the authentication|Use --cookies|auth required/i.test(s))
+    return '该内容需要登录后才能解析（登录墙），云端没有此平台的账号登录态。请使用本机版（带 cookies）。';
   if (/Private video/i.test(s)) return '该视频为私享（Private）视频，无法公开解析。';
   if (/Video unavailable|This video is not available|isn't available|is not available/i.test(s))
     return '该视频当前不可用（可能已删除、被举报、地区限制或版权受限）。';
