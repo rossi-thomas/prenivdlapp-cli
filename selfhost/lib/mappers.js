@@ -86,6 +86,15 @@ function dedupeBy(list, keyFn) {
   return out;
 }
 
+/** 同一文件的 CDN 镜像 host 不同、path 相同 —— 按 path 去重即去镜像重。 */
+function mirrorKey(u) {
+  try {
+    return new URL(u).pathname;
+  } catch (_) {
+    return u;
+  }
+}
+
 function qualityOf(f) {
   if (f.format_note) return f.format_note;
   if (f.height) return `${f.height}p`;
@@ -149,7 +158,15 @@ const builders = {
 
   tiktok: (info) => {
     const formats = listFormats(info);
-    const video = formats.filter((f) => hasVideo(f)).map((f) => f.url);
+    // TikTok 同一清晰度会从 v16/v19 等多个镜像 host 各吐一份 URL（不同 host、
+    // 相同 path 即同一文件）。按 path 去重、清晰度从高到低排，调用方看到的
+    // 才是真正的清晰度选项，而不是一堆重复镜像。
+    const video = dedupeBy(
+      [...formats.filter((f) => hasVideo(f))]
+        .sort((a, b) => (b.height || 0) - (a.height || 0) || (b.tbr || 0) - (a.tbr || 0))
+        .map((f) => f.url),
+      mirrorKey
+    );
     const audio = formats.filter((f) => !hasVideo(f) && hasAudio(f)).map((f) => f.url);
     const images = Array.isArray(info.entries)
       ? info.entries.map((e) => safeUrl(e.thumbnail)).filter(Boolean)
@@ -168,9 +185,14 @@ const builders = {
   },
 
   tiktokv1: (info) => {
-    // Shape expected by normalizeTikTok(data, 'v1').
+    // Shape expected by normalizeTikTok(data, 'v1'). 同上：去镜像重。
     const formats = listFormats(info);
-    const video = formats.filter((f) => hasVideo(f)).map((f) => f.url);
+    const video = dedupeBy(
+      [...formats.filter((f) => hasVideo(f))]
+        .sort((a, b) => (b.height || 0) - (a.height || 0) || (b.tbr || 0) - (a.tbr || 0))
+        .map((f) => f.url),
+      mirrorKey
+    );
     const audio = formats.filter((f) => !hasVideo(f) && hasAudio(f)).map((f) => f.url);
     return {
       title: info.title,
