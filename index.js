@@ -11,6 +11,28 @@ function getInput() {
   return (_input || (_input = require('./utils/input')));
 }
 
+// Accidental Ctrl+C guard for interactive sessions (a click in a QuickEdit
+// console freezes output and users then hit Ctrl+C, killing the session).
+// Armed by interactive entries only: first press prints a hint and opens a
+// 3s window, second press exits (130). One-shot downloads keep instant exit.
+let _exitArmed = false;
+let _exitTimer = null;
+function armExitGuard() {
+  if (armExitGuard.done) return;
+  armExitGuard.done = true;
+  process.on('SIGINT', () => {
+    if (_exitArmed) {
+      clearTimeout(_exitTimer);
+      _exitArmed = false;
+      process.exit(130);
+    }
+    _exitArmed = true;
+    process.stdout.write('\n[Ctrl+C] 再按一次确认退出（误触请忽略）。\n');
+    _exitTimer = setTimeout(() => { _exitArmed = false; }, 3000);
+    if (_exitTimer && typeof _exitTimer.unref === 'function') _exitTimer.unref();
+  });
+}
+
 program
   .name('prnvapp')
   .description('Social Media Downloader CLI')
@@ -21,7 +43,10 @@ program
   .command('interactive')
   .alias('i')
   .description('Start interactive mode')
-  .action(() => getInput().startInteractive());
+  .action(() => {
+    armExitGuard();
+    getInput().startInteractive();
+  });
 
 // Auto-detect command: `node index.js download <url>`
 program
@@ -82,6 +107,7 @@ if (isBareUrl) {
     if (ok === false) process.exitCode = 1;
   })();
 } else if (process.argv.length === 2) {
+  armExitGuard();
   getInput().startInteractive();
 } else {
   program.parse();

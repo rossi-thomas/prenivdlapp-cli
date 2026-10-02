@@ -15,19 +15,6 @@ const { builders } = require('./lib/mappers');
 // The CLI's routes/api.js reads some endpoints under legacy names.
 const ALIASES = { facebookv1: 'facebook', igdl: 'instagram' };
 
-// Optional shared-secret gate. When PRENIV_API_TOKEN is set in the server's
-// environment, every request must carry a matching x-api-token header; when
-// unset the API stays fully open (local/dev convenience). Node's HTTP parser
-// lowercases header names, so only that spelling is matched.
-const TOKEN = process.env.PRENIV_API_TOKEN ? String(process.env.PRENIV_API_TOKEN) : '';
-
-function isAuthorized(headers = {}) {
-  if (!TOKEN) return true;
-  const got = headers && headers['x-api-token'];
-  if (typeof got !== 'string' || got.length !== TOKEN.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(TOKEN));
-}
-
 function parseRequest(urlStr) {
   const u = new URL(urlStr, 'http://localhost');
   const seg = u.pathname.split('/').filter(Boolean);
@@ -155,6 +142,7 @@ async function extract(platform, url, builder, client) {
   // failover "小号") is tried in order until one yields usable media. Failure
   // here can never regress pass 1.
   const jarCount = cookieJarCount();
+  let cookieError = null;
   if (jarCount > 0) {
     for (let i = 0; i < jarCount; i++) {
       try {
@@ -163,7 +151,7 @@ async function extract(platform, url, builder, client) {
           return toPayload(withCookies);
         }
       } catch (_) {
-        // Ignored: report the cookieless outcome below, which has the real reason.
+        cookieError = _.message;
       }
     }
   }
@@ -171,14 +159,23 @@ async function extract(platform, url, builder, client) {
   if (cookieless && cookieless.unsupported) {
     return { status: failureStatusFor(platform), msg: cookieless.msg };
   }
-  if (cookieless) return toPayload(cookieless);
-  return { status: failureStatusFor(platform), msg: cookielessError || 'extraction failed' };
+  // Do not report metadata-only extraction as success. YouTube bot walls can
+  // return a title/thumbnail while exposing zero usable formats; the previous
+  // code turned that into `status:true` with empty downloads, which made the
+  // frontend show a misleading generic message.
+  if (cookieless && !hasMedia(cookieless)) {
+    return {
+      status: failureStatusFor(platform),
+      msg:
+        cookieError ||
+        cookielessError ||
+        'no downloadable media formats returned (the source may require login or block the cloud server)'
+    };
+  }
+  return { status: failureStatusFor(platform), msg: cookieError || cookielessError || 'extraction failed' };
 }
 
-async function handle(reqUrl, headers) {
-  // Defense in depth: hosts gate before calling, but a caller that skips the
-  // check must still never get data past the token.
-  if (!isAuthorized(headers)) return { unauthorized: true };
+async function handle(reqUrl) {
 
   let parsed;
   try {
@@ -233,11 +230,11 @@ function infoPayload() {
     status: true,
     name: 'prenivdl self-hosted API',
     engine: 'yt-dlp',
-    platforms: ['tiktok', 'facebook', 'instagram', 'twitter', 'douyin', 'pinterest', 'youtube', 'capcut', 'bluesky', 'rednote', 'threads', 'kuaishou', 'weibo'],
+    platforms: ['tiktok', 'facebook', 'instagram', 'twitter', 'douyin', 'pinterest', 'youtube', 'capcut', 'bluesky', 'rednote', 'kuaishou', 'weibo'],
     unsupported: ['spotify', 'applemusic'],
     cache: { entries: cache.size, ttlSeconds: CACHE_TTL_MS / 1000 },
     usage: '/api/<platform>?url=<encoded url>'
   };
 }
 
-module.exports = { handle, infoPayload, parseRequest, isAuthorized };
+module.exports = { handle, infoPayload, parseRequest };

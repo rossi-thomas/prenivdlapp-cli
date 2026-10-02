@@ -23,7 +23,6 @@
  *                profile:{name,handle}}}
  *   rednote     {status:200, data:{title, nickname, desc, duration,
  *                engagement, images:[url], downloads:[{url,quality}]}}
- *   threads     {status:true, data:{download, quality}}
  *   kuaishou    {status:true, data:{title, author, username, videoUrl, stats}}
  *   weibo       {status:true, data:{title, author, username, videoUrl, stats}}
  *
@@ -233,14 +232,6 @@ const builders = {
       ? [{ quality: best.height ? String(best.height) : 'HD', url: best.url }]
       : [];
     return { title: info.title || info.description, media };
-  },
-
-  threads: (info) => {
-    const best = pickBest(info) || (safeUrl(info.url) ? { url: info.url } : null);
-    return {
-      quality: (best && best.format_note) || 'HD',
-      download: best ? best.url : null
-    };
   },
 
   bluesky: (info) => {

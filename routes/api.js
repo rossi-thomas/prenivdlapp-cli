@@ -27,7 +27,6 @@ const getApi = {
   capcut: apiUrl('/api/capcut?url='),
   bluesky: apiUrl('/api/bluesky?url='),
   rednote: apiUrl('/api/rednote?url='),
-  threads: apiUrl('/api/threads?url='),
   kuaishou: apiUrl('/api/kuaishou?url='),
   weibo: apiUrl('/api/weibo?url='),
 };

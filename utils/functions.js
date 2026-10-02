@@ -4,13 +4,7 @@ const chalk = require('chalk');
 const MAX_FILE_SIZE = 35 * 1024 * 1024; // 50 MB in bytes
 
 const fetchJson = async (url, options = {}) => {
-  // Attach the API token to every backend request when one is configured.
-  // Token-gated backends (self-hosted server, deployed Vercel function)
-  // reject requests that lack a matching x-api-token header.
   const headers = { ...(options.headers || {}) };
-  if (process.env.PRENIV_API_TOKEN && !headers['x-api-token']) {
-    headers['x-api-token'] = process.env.PRENIV_API_TOKEN;
-  }
   try {
     const result = await (await axios.get(url, { ...options, headers })).data;
     return result;
@@ -110,9 +104,6 @@ const generateFilename = (platform, data = {}) => {
       const ext = data.ext || 'mp3';
       return `${title}_${type}_${timestamp}.${ext}`;
     },
-    threads: () => {
-      return `threads_video_${timestamp}.mp4`;
-    },
     tiktok: () => {
       const type = data.type || 'video';
       const index = data.index !== undefined ? `_${data.index + 1}` : '';
@@ -190,9 +181,6 @@ const getSelectedOption = (platform, selectedDownload) => {
       type: selectedDownload.type,
       format: selectedDownload.format,
       maxSize: selectedDownload.type === 'audio' ? 10485760 : null
-    }),
-    threads: () => ({
-      url: selectedDownload.url
     }),
     tiktok: () => ({
       url: selectedDownload.url,
@@ -368,9 +356,6 @@ const buildDownloadChoices = (platform, data = {}) => {
           value: item
         });
       });
-      return choices;
-    },
-    threads: () => {
       return choices;
     },
     tiktok: () => {

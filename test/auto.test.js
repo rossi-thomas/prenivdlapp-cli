@@ -34,7 +34,6 @@ test('detectPlatform resolves every registered platform URL (no network)', async
     ['https://www.capcut.com/tv2/ABC/', 'capcut'],
     ['https://bsky.app/profile/u.bsky.social/post/ABC', 'bluesky'],
     ['https://www.xiaohongshu.com/explore/ABC', 'rednote'],
-    ['https://www.threads.net/@u/post/ABC', 'threads'],
     ['https://www.kuaishou.com/short-video/ABC', 'kuaishou'],
     ['https://weibo.com/tv/show/ABC', 'weibo']
   ];

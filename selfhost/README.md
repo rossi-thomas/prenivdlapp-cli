@@ -19,19 +19,16 @@ selfhost/
 ├── server.js          # 本地零依赖 http 服务（端口 8787，PORT 可改）
 ├── app.js             # 共享 handler：URL 解析 / 平台别名 / rednote&pinterest 契约
 ├── api/
-│   ├── download.js    # Vercel serverless 函数（与 server.js 同逻辑，加 captcha/session 门）
+│   ├── download.js    # Vercel serverless 函数（与 server.js 同逻辑，公开 API，无共享 token 鉴权）
 │   └── bin/yt-dlp     # Linux/amd64 版 yt-dlp 二进制（已入库，Git 部署依赖它）
-├── public/
-│   └── index.html     # 在线网页版前端（单文件，同源调用 /api，3×3 图片验证码）
 ├── lib/
 │   ├── ytdlp.js       # yt-dlp 子进程执行器（90s 超时，EXTRACTOR_ARGS 调参表）
-│   ├── webgate.js     # 图片验证码 + 会话（captcha/session，从 CF 版移植的独立实现）
 │   └── mappers.js     # 每平台 yt-dlp→CLI 契约 JSON 的映射器
 ├── scripts/
 │   └── fetch-ytdlp.cjs# 刷新 api/bin/yt-dlp 到最新版本（或指定版本）
 ├── cloudflare/        # Cloudflare Containers 部署套件（需 Workers Paid + Docker）
 ├── vendor/            # 参考项目浅克隆（cobalt / f2 / yt-dlp 源码，gitignore）
-├── vercel.json        # /api/:platform → /api/download rewrite + 超时/内存/打包
+├── vercel.json        # /api/:platform → /api/download rewrite + 超时/内存/打包（纯后端 API，无前端静态页）
 └── package.json       # 零运行时依赖
 ```
 
@@ -60,10 +57,10 @@ Vercel 后台把这个仓库接进来后，每次 `git push` 都会自动部署�
 
 | 设置项 | 值 | 为什么 |
 |---|---|---|
-| Root Directory | `selfhost` | `vercel.json` / `api/` / `public/` 都在这一层 |
+| Root Directory | `selfhost` | `vercel.json` / `api/` 都在这一层 |
 | Production Branch | `main` | 推送主线即生产 |
 | Framework Preset | Other | 纯函数项目 |
-| Environment Variables | `YTDLP_COOKIES_B64`（可选）<br>`CAPTCHA_SECRET`（可选，见下）<br>`PRENIV_API_TOKEN`（可选，见下） | Bot 盾视频/抖音/小红书需要 cookies；网页版需要验证码密钥；加密 API 需要共享密钥 |
+| Environment Variables | `YTDLP_COOKIES_B64`（可选） | Bot 盾视频/抖音/小红书需要 cookies |
 
 > **`api/bin/yt-dlp` 必须入库。** 它已在仓库里（38 MB，linux/amd64）。Git 构建
 > 遵守 `.gitignore`，若不入库，部署产物会缺少引擎、API 全部报错。`vercel.json`
@@ -86,22 +83,13 @@ CLI 上传的是本地工作目录（遵守 `.vercelignore`，其中 `api/bin/` 
 
 部署后即用：`PRENIV_API_BASE=https://<your-project>.vercel.app node ..\index.js <platform> <url>`。
 
-### 在线网页版（同步部署）
+### 纯后端 API（无前端页面）
 
-`public/index.html` 是完整的单文件前端（原 Cloudflare Pages 版已并入本 Vercel
-项目并退役），与 API 同源，无需单独部署：
+本项目在 Vercel 上只提供 JSON API，没有浏览器前端页面：`/` 与 `/health`
+返回服务信息 JSON，下载走 `/api/<platform>?url=<编码后的媒体链接>`，无需 `x-api-token`。
 
-- 打开 `https://<your-project>.vercel.app` 即用；`?api=` 查询参数可把请求指向
-  其它后端（本地联调：`http://127.0.0.1:8787/?api=http://127.0.0.1:8787/api`）。
-- 首次解析先弹 3×3 图片验证码，验证通过后签发 30 分钟会话（localStorage
-  `prenivdl_session_v1`），后续请求带 `x-session` 头；401 时自动重验证码。
-- 验证码与会话由 `lib/webgate.js` 实现（Node webcrypto，零依赖，与旧 CF 版逻辑
-  一致）。**需要设置 `CAPTCHA_SECRET`**（任意随机串，`openssl rand -hex 32`），
-  否则 `/api/captcha` 返回 503、网页版退回纯 API 直连。设置 `PRENIV_API_TOKEN`
-  后 cookie/CLI 通道不变（`x-api-token` 直接放行），未设置则仅验证码会话可用。
-
-> **直链缓存**：通过验证码会话的响应一律 `no-store`（防止 CDN 缓存绕过验证码）；
-> `x-api-token`（CLI）的响应缓存 `s-maxage=120`。两者互不影响。
+> **直链缓存**：成功的提取响应缓存 `s-maxage=120`（媒体直链数小时内有效，
+> CLI 重复请求可命中边缘缓存）；`__diag` 与裸信息路径一律 `no-store`。
 
 ## 支持矩阵（本仓库 yt-dlp 2026.08.19 实测）
 
@@ -111,7 +99,7 @@ CLI 上传的是本地工作目录（遵守 `.vercelignore`，其中 `api/bin/` 
 | tiktok / instagram / facebook / twitter(X) / weibo / bluesky / pinterest | ✅ 已验证 | yt-dlp 官方提取器 |
 | douyin | ⚠️ 需 cookies | 数据中心 IP 被风控（见下方 cookies 一节） |
 | rednote（小红书） | ⚠️ 视网络 | 官方提取器存在，但数据中心 IP 常被验证墙挡在提取器之前 |
-| threads / kuaishou / capcut | ❌ 此版本无提取器 | yt-dlp 主线不含；诚实报错 |
+| kuaishou / capcut | ❌ 此版本无提取器 | yt-dlp 主线不含；诚实报错 |
 | spotify / applemusic | ❌ | DRM，诚实返回 unsupported（上游也一样） |
 
 > **YouTube 风控（重要，如实说明）**：YouTube 会对**数据中心 IP**（Vercel/CF 等
@@ -123,7 +111,7 @@ CLI 上传的是本地工作目录（遵守 `.vercelignore`，其中 `api/bin/` 
 > `server.js`。
 
 > offline 注意：红色 ❌ 平台 CLI 会显示明确的 JSON 错误（不再摸到不稳定的
-> 上游）。如果必须覆盖 threads/kuaishou/capcut，可以像 cobalt 那样为它们各写
+> 上游）。如果必须覆盖 kuaishou/capcut，可以像 cobalt 那样为它们各写
 > 一个专用抓取器 —— 属于后续工作，不在本期范围。
 
 ## 平台契约（CLI routes 需要的 JSON 形状，来自 routes/*.js）
@@ -172,14 +160,9 @@ YouTube Bot 盾返回明确受限提示（cookies 无法绕开，见支持矩阵
 ## 验证
 
 ```powershell
-# 健康检查
+# 健康检查（API 为公开访问，无需鉴权头）
 Invoke-RestMethod http://127.0.0.1:8787/
 
 # 全平台形状自查（npm test 里的 test/api.test.js 覆盖 15 个终端的 URL 拼接）
 npm run check
-
-# 网页版全链 e2e（captcha → verify → session → youtube；默认打线上，可用 BASE 覆盖）
-# 注意：走代理环境时脚本自动用 node --use-env-proxy 重跑自己
-$env:BASE = "https://prenivdl-sage.vercel.app"   # 或本地 http://127.0.0.1:8787
-node scripts/e2e-online.cjs
 ```

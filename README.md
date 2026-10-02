@@ -6,7 +6,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/arsya371/prenivdlapp-cli?style=social)](https://github.com/arsya371/prenivdlapp-cli)
 [![GitHub Forks](https://img.shields.io/github/forks/arsya371/prenivdlapp-cli?style=social)](https://github.com/arsya371/prenivdlapp-cli/fork)
 
-**PRENIVDL - Universal Social Media Downloader CLI.** Download videos, images, audio from TikTok, Instagram, YouTube, Twitter/X, Facebook, Spotify, RedNote, Threads, Kuaishou, Weibo & more. Cross-platform: Windows | Linux | macOS | Termux. Free & open-source.
+**PRENIVDL - Universal Social Media Downloader CLI.** Download videos, images, audio from TikTok, Instagram, YouTube, Twitter/X, Facebook, Spotify, RedNote, Kuaishou, Weibo & more. Cross-platform: Windows | Linux | macOS | Termux. Free & open-source.
 
 > 📖 **在线下载 / Online:** 网页版下载服务已并入 `selfhost/` 的 Vercel 单项目
 > （前端静态页 + 图片验证码 + 下载 API 同一域名），部署与自建说明见
@@ -26,7 +26,6 @@
 - **CapCut Downloader** - Download videos from CapCut with quality options (HD No Watermark, No Watermark, Watermark)
 - **Bluesky Downloader** - Download images and videos from Bluesky posts
 - **RedNote/Xiaohongshu Downloader** - Download videos and images from RedNote/Xiaohongshu posts with quality selection
-- **Threads Downloader** - Download videos from Threads posts
 - **Kuaishou Downloader** - Download videos from Kuaishou posts
 - **Weibo Downloader** - Download videos and images from Weibo posts
 - **Beautiful CLI Interface** - Colorful output with ASCII art banner and custom prompt
@@ -227,7 +226,6 @@ line (`node index.js <url>`) — the platform is auto-detected:
 - **CapCut**: `https://www.capcut.com/tv2/ABC123/`
 - **Bluesky**: `https://bsky.app/profile/user.bsky.social/post/ABC123`
 - **RedNote/Xiaohongshu**: `https://www.xiaohongshu.com/explore/ABC123` or `https://xhslink.com/ABC123`
-- **Threads**: `https://www.threads.net/@username/post/ABC123`
 - **Kuaishou**: `https://www.kuaishou.com/short-video/ABC123` or `https://ksurl.cn/ABC123`
 - **Weibo**: `https://weibo.com/tv/show/ABC123`
 

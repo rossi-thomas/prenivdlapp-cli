@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { PLATFORM_CONFIG, matchPlatform } = require('../utils/config');
 
-test('PLATFORM_CONFIG registers all 15 platforms', () => {
+test('PLATFORM_CONFIG registers all 14 platforms', () => {
   assert.deepEqual(
     PLATFORM_CONFIG.map((p) => p.command),
     [
@@ -21,7 +21,6 @@ test('PLATFORM_CONFIG registers all 15 platforms', () => {
       'capcut',
       'bluesky',
       'rednote',
-      'threads',
       'kuaishou',
       'weibo'
     ]
@@ -65,7 +64,6 @@ test('matchPlatform resolves every supported host', () => {
     ['bsky.app', 'https://bsky.app/profile/u.bsky.social/post/ABC', 'bluesky'],
     ['www.xiaohongshu.com', 'https://www.xiaohongshu.com/explore/ABC', 'rednote'],
     ['xhslink.com', 'https://xhslink.com/ABC', 'rednote'],
-    ['www.threads.net', 'https://www.threads.net/@u/post/ABC', 'threads'],
     ['www.kuaishou.com', 'https://www.kuaishou.com/short-video/ABC', 'kuaishou'],
     ['ksurl.cn', 'https://ksurl.cn/ABC', 'kuaishou'],
     ['weibo.com', 'https://weibo.com/tv/show/ABC', 'weibo'],

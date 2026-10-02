@@ -2,7 +2,7 @@
  * Platform registry + URL matching.
  *
  * Loads route modules LAZILY: every handler is a thin thunk that requires the
- * route file only on first use. Requiring all 15 routes up front would pull in
+ * route file only on first use. Requiring all 14 routes up front would pull in
  * their heavy dependencies (inquirer, ora, axios, chalk) on every CLI run —
  * even a bare `--version` or `--help` — and cost half a second of startup.
  */
@@ -20,7 +20,6 @@ const ROUTE_EXPORTS = {
   capcut: 'downloadCapcut',
   bluesky: 'downloadBluesky',
   rednote: 'downloadRedNote',
-  threads: 'downloadThreads',
   kuaishou: 'downloadKuaishou',
   weibo: 'downloadWeibo'
 };
@@ -141,14 +140,6 @@ const PLATFORM_CONFIG = [
     mediaType: 'post',
     handler: lazyHandler('rednote'),
     exampleUrl: 'https://www.xiaohongshu.com/explore/ABC123'
-  },
-  {
-    name: 'Threads',
-    command: 'threads',
-    domains: ['threads.net'],
-    mediaType: 'video',
-    handler: lazyHandler('threads'),
-    exampleUrl: 'https://www.threads.net/@username/post/ABC123'
   },
   {
     name: 'Kuaishou',
