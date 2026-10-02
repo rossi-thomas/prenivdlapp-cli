@@ -11,6 +11,7 @@
  */
 
 const { handle, infoPayload } = require('../app');
+const { allowedTarget, relay } = require('../lib/relay');
 
 const REMOTE_API_BASE = process.env.PRENIV_REMOTE_API_BASE
   ? String(process.env.PRENIV_REMOTE_API_BASE).replace(/\/+$/, '')
@@ -56,6 +57,14 @@ async function route(req, res, platform) {
 
   const url = req.url || '/';
   const bare = url === '/' || url === '/health' || url === '/api' || url === '/api/';
+  if (platform === 'fetch') {
+    // Binary relay — streams media bytes, never JSON (except errors).
+    const target = allowedTarget(new URL(url, 'http://localhost').searchParams.get('url') || '');
+    if (!target) {
+      return json(res, 400, { status: false, msg: 'fetch: url missing or host not allowlisted' });
+    }
+    return relay(req, res, target);
+  }
   if (REMOTE_API_BASE && !bare && platform) {
     return proxyRemote(req, res, platform);
   }
